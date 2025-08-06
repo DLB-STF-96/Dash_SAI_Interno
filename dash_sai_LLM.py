@@ -1,4 +1,5 @@
 #ADOPCION
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -9,6 +10,7 @@ from datetime import datetime
 import re
 import requests
 import json
+import os
 
 # Configuración de la página
 st.set_page_config(
@@ -50,7 +52,7 @@ def generate_llm_summary(data_text, api_key):
         return f"Error al conectar con el LLM: {str(e)}"
 
 # NUEVA FUNCIÓN: Generar texto plano con toda la información visible
-def generate_summary_text(filtered_data, selected_months, selected_countries, selected_areas, selected_cargo, filter_type):
+def generate_summary_text(filtered_data, selected_months, selected_countries, selected_areas, filter_type):
     """
     Genera un texto plano con toda la información visible basada en los filtros seleccionados
     
@@ -59,7 +61,6 @@ def generate_summary_text(filtered_data, selected_months, selected_countries, se
         selected_months: Lista de meses seleccionados
         selected_countries: Lista de países seleccionados
         selected_areas: Lista de áreas seleccionadas
-        selected_cargo: Cargo seleccionado
         filter_type: Tipo de filtro temporal aplicado
     
     Returns:
@@ -74,8 +75,7 @@ def generate_summary_text(filtered_data, selected_months, selected_countries, se
     summary_text += f"- Tipo de filtro temporal: {filter_type}\n"
     summary_text += f"- Meses seleccionados ({len(selected_months)}): {', '.join(selected_months)}\n"
     summary_text += f"- Países seleccionados ({len(selected_countries)}): {', '.join(selected_countries)}\n"
-    summary_text += f"- Áreas seleccionadas ({len(selected_areas)}): {', '.join(selected_areas)}\n"
-    summary_text += f"- Cargo seleccionado: {selected_cargo}\n\n"
+    summary_text += f"- Áreas seleccionadas ({len(selected_areas)}): {', '.join(selected_areas)}\n\n"
     
     # Métricas principales
     summary_text += "MÉTRICAS PRINCIPALES:\n"
@@ -87,14 +87,6 @@ def generate_summary_text(filtered_data, selected_months, selected_countries, se
     # Total de Usuarios Activos
     active_users = filtered_data[filtered_data['usos_ia'] > 0]['NOMBRE'].nunique()
     summary_text += f"- Total Usuarios Activos: {active_users}\n"
-    
-    # Total de usos de IA
-    total_usage = int(filtered_data['usos_ia'].sum())
-    summary_text += f"- Usos Totales IA: {total_usage:,}\n"
-    
-    # Promedio mensual
-    avg_usage = filtered_data['usos_ia'].mean()
-    summary_text += f"- Promedio Mensual: {avg_usage:.1f}\n"
     
     # % Acumulado Adopción SAI
     users_with_usage = filtered_data[filtered_data['usos_ia'] > 0]['NOMBRE'].nunique()
@@ -137,73 +129,19 @@ def generate_summary_text(filtered_data, selected_months, selected_countries, se
     # Análisis por país
     summary_text += "ANÁLISIS POR PAÍS:\n"
     country_data = filtered_data.groupby('PAIS').agg({
-        'NOMBRE': 'nunique',
-        'usos_ia': 'sum'
+        'NOMBRE': 'nunique'
     }).reset_index()
     
     for _, row in country_data.iterrows():
         country = row['PAIS']
         users = row['NOMBRE']
-        usage = row['usos_ia']
         
         # Calcular adopción por país
         country_filtered = filtered_data[filtered_data['PAIS'] == country]
         active_users_country = country_filtered[country_filtered['usos_ia'] > 0]['NOMBRE'].nunique()
         adoption_rate = (active_users_country / users) * 100 if users > 0 else 0
         
-        summary_text += f"- {country}: {users} usuarios, {int(usage)} usos totales, {adoption_rate:.1f}% adopción\n"
-    
-    summary_text += "\n"
-    
-    # Análisis por área
-    summary_text += "ANÁLISIS POR ÁREA:\n"
-    area_data = filtered_data.groupby('AREA').agg({
-        'NOMBRE': 'nunique',
-        'usos_ia': 'sum'
-    }).reset_index()
-    
-    for _, row in area_data.iterrows():
-        area = row['AREA']
-        users = row['NOMBRE']
-        usage = row['usos_ia']
-        
-        # Calcular adopción por área
-        area_filtered = filtered_data[filtered_data['AREA'] == area]
-        active_users_area = area_filtered[area_filtered['usos_ia'] > 0]['NOMBRE'].nunique()
-        adoption_rate = (active_users_area / users) * 100 if users > 0 else 0
-        
-        summary_text += f"- {area}: {users} usuarios, {int(usage)} usos totales, {adoption_rate:.1f}% adopción\n"
-    
-    summary_text += "\n"
-    
-    # Análisis por cargo
-    summary_text += "ANÁLISIS POR CARGO:\n"
-    cargo_data = filtered_data.groupby('CARGO').agg({
-        'NOMBRE': 'nunique',
-        'usos_ia': 'sum'
-    }).reset_index()
-    
-    for _, row in cargo_data.iterrows():
-        cargo = row['CARGO']
-        users = row['NOMBRE']
-        usage = row['usos_ia']
-        
-        # Calcular adopción por cargo
-        cargo_filtered = filtered_data[filtered_data['CARGO'] == cargo]
-        active_users_cargo = cargo_filtered[cargo_filtered['usos_ia'] > 0]['NOMBRE'].nunique()
-        adoption_rate = (active_users_cargo / users) * 100 if users > 0 else 0
-        
-        summary_text += f"- {cargo}: {users} usuarios, {int(usage)} usos totales, {adoption_rate:.1f}% adopción\n"
-    
-    summary_text += "\n"
-    
-    # Top 10 usuarios
-    summary_text += "TOP 10 USUARIOS POR USO DE IA:\n"
-    top_users = filtered_data.groupby(['NOMBRE', 'PAIS', 'CARGO', 'AREA'])['usos_ia'].sum().reset_index()
-    top_users = top_users.sort_values('usos_ia', ascending=False).head(10)
-    
-    for i, (_, row) in enumerate(top_users.iterrows(), 1):
-        summary_text += f"{i}. {row['NOMBRE']} ({row['PAIS']}, {row['CARGO']}, {row['AREA']}): {int(row['usos_ia'])} usos\n"
+        summary_text += f"- {country}: {users} usuarios, {adoption_rate:.1f}% adopción\n"
     
     summary_text += "\n"
     
@@ -216,16 +154,10 @@ def generate_summary_text(filtered_data, selected_months, selected_countries, se
     summary_text += f"- Cargos únicos: {filtered_data['CARGO'].nunique()}\n"
     summary_text += f"- Meses analizados: {len(selected_months)}\n"
     
-    # Estadísticas de uso
-    summary_text += f"- Uso mínimo de IA: {filtered_data['usos_ia'].min()}\n"
-    summary_text += f"- Uso máximo de IA: {filtered_data['usos_ia'].max()}\n"
-    summary_text += f"- Mediana de uso de IA: {filtered_data['usos_ia'].median():.1f}\n"
-    summary_text += f"- Desviación estándar de uso: {filtered_data['usos_ia'].std():.1f}\n"
-    
     return summary_text
 
 # NUEVA FUNCIÓN: Mostrar sección de resumen con LLM
-def show_llm_summary_section(filtered_data, selected_months, selected_countries, selected_areas, selected_cargo, filter_type):
+def show_llm_summary_section(filtered_data, selected_months, selected_countries, selected_areas, filter_type):
     """
     Muestra la sección de resumen con LLM incluyendo configuración de API y botón de generación
     """
@@ -261,18 +193,15 @@ def show_llm_summary_section(filtered_data, selected_months, selected_countries,
         - Total de profesionales elegibles
         - Usuarios activos e inactivos
         - Porcentajes de adopción (acumulado y promedio)
-        - Usos totales y promedios
         
         **📈 Análisis Detallado:**
-        - Adopción por mes, país, área y cargo
-        - Top 10 usuarios más activos
+        - Adopción por mes y país
         - Estadísticas descriptivas
         - Tendencias y patrones identificados
         
         **🎯 Filtros Aplicados:**
         - Período temporal seleccionado
-        - Países y áreas incluidos
-        - Cargo específico (si aplica)
+        - Países incluidos
         """)
     
     # Generar resumen si se presiona el botón
@@ -289,7 +218,6 @@ def show_llm_summary_section(filtered_data, selected_months, selected_countries,
                 selected_months, 
                 selected_countries, 
                 selected_areas, 
-                selected_cargo, 
                 filter_type
             )
             
@@ -340,76 +268,6 @@ def show_llm_summary_section(filtered_data, selected_months, selected_countries,
                 disabled=True
             )
 
-# NUEVA FUNCIÓN: Calcular rangos de ejes con margen del 10%
-def calculate_axis_range(values, margin_percent=0.1):
-    """
-    Calcula el rango de ejes con margen especificado
-    
-    Args:
-        values: Lista o array de valores numéricos
-        margin_percent: Porcentaje de margen (0.1 = 10%)
-    
-    Returns:
-        tuple: (valor_minimo_ajustado, valor_maximo_ajustado)
-    """
-    if len(values) == 0:
-        return [0, 100]
-    
-    # Filtrar valores no nulos y convertir a numérico
-    clean_values = [v for v in values if v is not None and not pd.isna(v)]
-    
-    if len(clean_values) == 0:
-        return [0, 100]
-    
-    min_val = min(clean_values)
-    max_val = max(clean_values)
-    
-    # Si todos los valores son iguales, crear un rango simétrico
-    if min_val == max_val:
-        if min_val == 0:
-            return [-1, 1]
-        else:
-            margin = abs(min_val) * margin_percent
-            return [min_val - margin, max_val + margin]
-    
-    # Calcular margen basado en el rango de datos
-    data_range = max_val - min_val
-    margin = data_range * margin_percent
-    
-    # Aplicar margen
-    adjusted_min = min_val - margin
-    adjusted_max = max_val + margin
-    
-    # Para valores que no pueden ser negativos (como porcentajes), ajustar el mínimo
-    if min_val >= 0 and adjusted_min < 0:
-        adjusted_min = max(0, min_val - (min_val * margin_percent))
-    
-    return [adjusted_min, adjusted_max]
-
-# FUNCIÓN OPTIMIZADA: Aplicar rangos de ejes a gráficos
-def apply_axis_ranges(fig, x_values=None, y_values=None, x_margin=0.1, y_margin=0.1):
-    """
-    Aplica rangos de ejes autoajustables a una figura de Plotly
-    
-    Args:
-        fig: Figura de Plotly
-        x_values: Valores del eje X (opcional)
-        y_values: Valores del eje Y (opcional)
-        x_margin: Margen para eje X (default 10%)
-        y_margin: Margen para eje Y (default 10%)
-    """
-    # Aplicar rango al eje Y si se proporcionan valores
-    if y_values is not None:
-        y_range = calculate_axis_range(y_values, y_margin)
-        fig.update_layout(yaxis=dict(range=y_range))
-    
-    # Aplicar rango al eje X si se proporcionan valores numéricos
-    if x_values is not None and all(isinstance(v, (int, float)) for v in x_values if v is not None):
-        x_range = calculate_axis_range(x_values, x_margin)
-        fig.update_layout(xaxis=dict(range=x_range))
-    
-    return fig
-
 # NUEVA FUNCIÓN: Validar condiciones para mostrar gráficos
 def validate_chart_conditions(selected_months, selected_countries, selected_areas):
     """
@@ -426,12 +284,7 @@ def validate_chart_conditions(selected_months, selected_countries, selected_area
     return {
         'show_adoption_trend': len(selected_months) > 1,
         'show_adoption_by_country': len(selected_countries) > 1,
-        'show_adoption_by_area': len(selected_areas) > 1,
-        'show_adoption_heatmap': len(selected_countries) > 1 or len(selected_areas) > 1,
-        'show_usage_trend': len(selected_months) > 1,
-        'show_usage_by_country': len(selected_countries) > 1,
-        'show_usage_by_area': len(selected_areas) > 1,
-        'show_usage_heatmap': len(selected_countries) > 1 or len(selected_areas) > 1
+        'show_adoption_heatmap': len(selected_countries) > 1 and len(selected_areas) > 1
     }
 
 # NUEVA FUNCIÓN: Mostrar mensaje informativo cuando no se cumplen condiciones
@@ -446,11 +299,102 @@ def show_chart_requirement_message(chart_type, requirement):
     messages = {
         'multiple_months': "📅 **Se requieren al menos 2 meses** para mostrar la evolución temporal.",
         'multiple_countries': "🌍 **Se requieren al menos 2 países** para mostrar la comparación entre países.",
-        'multiple_areas': "🏢 **Se requieren al menos 2 áreas** para mostrar la distribución entre áreas.",
-        'multiple_dimensions': "🔥 **Se requieren al menos 2 países o 2 áreas** para generar el mapa de calor."
+        'multiple_dimensions': "🔥 **Se requieren al menos 2 países y 2 áreas** para generar el mapa de calor."
     }
     
     st.info(messages.get(requirement, "ℹ️ Condiciones insuficientes para mostrar este gráfico."))
+
+# FUNCIÓN OPTIMIZADA: Formatear listas para mostrar en descripciones - MODIFICADA PARA MOSTRAR TODOS LOS ELEMENTOS
+def format_list_for_description(items, max_items=None, item_type="elementos"):
+    """
+    Formatea una lista de elementos para mostrar en descripciones de manera legible
+    MODIFICADO: Ahora muestra TODOS los elementos sin límite
+    
+    Args:
+        items: Lista de elementos a formatear
+        max_items: Parámetro mantenido por compatibilidad pero no se usa
+        item_type: Tipo de elementos (para el texto de resumen)
+    
+    Returns:
+        str: Texto formateado para la descripción con TODOS los elementos
+    """
+    if not items:
+        return f"ningún {item_type}"
+    
+    if len(items) == 1:
+        return f"**{items[0]}**"
+    elif len(items) == 2:
+        return f"**{items[0]}** y **{items[1]}**"
+    else:
+        # CAMBIO PRINCIPAL: Mostrar TODOS los elementos sin límite
+        return f"**{', '.join(items[:-1])}** y **{items[-1]}**"
+
+# FUNCIÓN OPTIMIZADA: Formatear período temporal para descripciones
+def format_time_period_for_description(selected_months):
+    """
+    Formatea el período temporal para mostrar en descripciones de manera legible
+    
+    Args:
+        selected_months: Lista de meses seleccionados
+    
+    Returns:
+        str: Texto formateado del período temporal
+    """
+    if not selected_months:
+        return "ningún período"
+    
+    if len(selected_months) == 1:
+        return f"**{selected_months[0]}**"
+    elif len(selected_months) <= 3:
+        return f"**{len(selected_months)} meses** ({', '.join(selected_months)})"
+    else:
+        # Ordenar meses cronológicamente para mostrar rango
+        sorted_months = sort_months_chronologically(selected_months)
+        return f"**{len(selected_months)} meses** (desde **{sorted_months[0]}** hasta **{sorted_months[-1]}**)"
+
+# FUNCIÓN COMPLETAMENTE OPTIMIZADA: Generar descripción dinámica para gráficos - MODIFICADA PARA MOSTRAR TODOS LOS ELEMENTOS
+def generate_chart_description(chart_type, selected_months, selected_countries, selected_areas):
+    """
+    Genera una descripción dinámica detallada para cada gráfico basada en los filtros seleccionados
+    con formato mejorado y texto más natural
+    MODIFICADO: Ahora muestra TODOS los países y áreas seleccionados
+    
+    Args:
+        chart_type: Tipo de gráfico ('trend', 'country', 'heatmap')
+        selected_months: Lista de meses seleccionados
+        selected_countries: Lista de países seleccionados
+        selected_areas: Lista de áreas seleccionadas
+    
+    Returns:
+        str: Descripción detallada y dinámica del gráfico
+    """
+    # Formatear elementos para las descripciones - SIN LÍMITE DE ELEMENTOS
+    months_text = format_time_period_for_description(selected_months)
+    countries_text = format_list_for_description(selected_countries, item_type="países")
+    areas_text = format_list_for_description(selected_areas, item_type="áreas")
+    
+    # Generar descripciones específicas por tipo de gráfico
+    if chart_type == 'trend':
+        return (f"📈 **Análisis temporal de adopción SAI:** Este gráfico muestra la evolución del "
+                f"porcentaje de adopción durante {months_text}, evaluando los países {countries_text} "
+                f"en las áreas de {areas_text}. La línea de tendencia indica la dirección general "
+                f"del crecimiento o decrecimiento en la adopción de la herramienta SAI.")
+    
+    elif chart_type == 'country':
+        return (f"🌍 **Comparación de adopción por países:** Este gráfico compara el porcentaje de "
+                f"adopción de SAI entre {countries_text} durante el período {months_text}, "
+                f"analizando específicamente las áreas de {areas_text}. Los países están ordenados "
+                f"de mayor a menor adopción para facilitar la identificación de líderes en la "
+                f"implementación de SAI.")
+    
+    elif chart_type == 'heatmap':
+        return (f"🔥 **Mapa de calor multidimensional:** Esta visualización muestra la intensidad "
+                f"de adopción de SAI cruzando {countries_text} con {areas_text} durante el período "
+                f"{months_text}. Los colores más intensos (verdes) indican mayor adopción, mientras "
+                f"que los colores más fríos (rojos) representan menor adopción, permitiendo "
+                f"identificar combinaciones país-área con mejor performance.")
+    
+    return "Descripción no disponible para este tipo de gráfico."
 
 # Función para ordenar meses cronológicamente
 def sort_months_chronologically(month_columns):
@@ -529,26 +473,31 @@ def sort_months_chronologically(month_columns):
     # Devolver solo los nombres de meses ordenados
     return [item[0] for item in month_data]
 
-# FUNCIÓN OPTIMIZADA: Filtrar meses por período
+# FUNCIÓN OPTIMIZADA: Filtrar meses por período (EXCLUYE MES ACTUAL)
 def filter_months_by_period(month_columns_sorted, selected_period):
     """
-    Filtra los meses según el período seleccionado
+    Filtra los meses según el período seleccionado, excluyendo el mes más reciente (mes en curso)
+    para los filtros de "Últimos X meses"
     """
     if selected_period == "Todos los meses":
         return month_columns_sorted
     
-    # Determinar cuántos meses tomar desde el final
-    period_mapping = {
-        "Últimos 3 meses": 3,
-        "Últimos 6 meses": 6,
-        "Últimos 9 meses": 9
-    }
-    
-    if selected_period in period_mapping:
+    # OPTIMIZACIÓN: Para filtros de "Últimos X meses", excluir el mes más reciente
+    if selected_period in ["Últimos 3 meses", "Últimos 6 meses", "Últimos 9 meses"]:
+        # Excluir el último mes (mes en curso) para estos filtros
+        available_months = month_columns_sorted[:-1] if len(month_columns_sorted) > 1 else []
+        
+        # Determinar cuántos meses tomar
+        period_mapping = {
+            "Últimos 3 meses": 3,
+            "Últimos 6 meses": 6,
+            "Últimos 9 meses": 9
+        }
+        
         num_months = period_mapping[selected_period]
-        return month_columns_sorted[-num_months:] if len(month_columns_sorted) >= num_months else month_columns_sorted
+        return available_months[-num_months:] if len(available_months) >= num_months else available_months
     
-    # NUEVA FUNCIONALIDAD: Mes anterior
+    # FUNCIONALIDAD EXISTENTE: Mes anterior
     if selected_period == "Mes anterior":
         # Retorna el penúltimo mes (mes anterior al último)
         if len(month_columns_sorted) >= 2:
@@ -575,7 +524,7 @@ def create_dynamic_filters(month_columns_sorted):
     selected_months = []
     
     if filter_type == "Por Período":
-        # Opciones de período predefinidas (AÑADIDA OPCIÓN "Mes anterior")
+        # Opciones de período predefinidas
         period_options = [
             "Todos los meses",
             "Mes anterior",
@@ -587,22 +536,25 @@ def create_dynamic_filters(month_columns_sorted):
         selected_period = st.sidebar.selectbox(
             "📅 Seleccionar Período",
             period_options,
-            help="Selecciona un período predefinido para filtrar los datos"
+            help="Selecciona un período predefinido para filtrar los datos. Los filtros 'Últimos X meses' excluyen el mes más reciente."
         )
         
         # Filtrar meses según el período seleccionado
         selected_months = filter_months_by_period(month_columns_sorted, selected_period)
         
-        # Mostrar información del período seleccionado
+        # OPTIMIZACIÓN: Mostrar información detallada del período seleccionado
         if selected_period == "Mes anterior":
             if len(selected_months) > 0:
-                st.sidebar.info(f"📊 **Período seleccionado:** {selected_period}\n\n**Mes incluido:** {selected_months[0]}")
+                st.sidebar.info(f"📊 **Período:** {selected_period}\n\n**Mes incluido:** {selected_months[0]}")
             else:
                 st.sidebar.warning("⚠️ No hay suficientes meses para mostrar el mes anterior")
-        elif selected_period != "Todos los meses":
-            st.sidebar.info(f"📊 **Período seleccionado:** {selected_period}\n\n**Meses incluidos:** {len(selected_months)} meses")
-        else:
-            st.sidebar.info(f"📊 **Período seleccionado:** Todos los meses disponibles\n\n**Total de meses:** {len(selected_months)} meses")
+        elif selected_period in ["Últimos 3 meses", "Últimos 6 meses", "Últimos 9 meses"]:
+            if len(selected_months) > 0:
+                st.sidebar.info(f"📊 **Período:** {selected_period} (excluyendo mes actual)\n\n**Meses incluidos:** {len(selected_months)} meses\n\n**Rango:** {selected_months[0]} a {selected_months[-1]}")
+            else:
+                st.sidebar.warning(f"⚠️ No hay suficientes meses históricos para mostrar {selected_period}")
+        elif selected_period == "Todos los meses":
+            st.sidebar.info(f"📊 **Período:** Todos los meses disponibles\n\n**Total:** {len(selected_months)} meses")
     
     else:  # Por Meses Específicos
         # Permitir selección manual de meses
@@ -621,16 +573,16 @@ def create_dynamic_filters(month_columns_sorted):
     
     return selected_months, filter_type
 
-# NUEVA FUNCIÓN: Crear filtros múltiples con checkboxes
+# NUEVA FUNCIÓN: Crear filtros múltiples con checkboxes (MODIFICADA - SIN FILTRO DE CARGO)
 def create_multiple_filters(df_melted):
     """
-    Crea filtros múltiples con checkboxes para países y áreas
+    Crea filtros múltiples con checkboxes para países y áreas (sin filtro de cargo)
     
     Args:
         df_melted: DataFrame con los datos
     
     Returns:
-        tuple: (selected_countries, selected_areas, selected_cargos)
+        tuple: (selected_countries, selected_areas)
     """
     st.sidebar.subheader("🎯 Filtros Múltiples")
     
@@ -651,11 +603,13 @@ def create_multiple_filters(df_melted):
     
     st.sidebar.markdown("---")
     
-    # Filtro múltiple por áreas
+    # MODIFICADO: Filtrar áreas para excluir "Operaciones"
     st.sidebar.write("🏢 **Seleccionar Áreas:**")
-    areas = sorted([str(x) for x in df_melted['AREA'].dropna().unique()])
+    all_areas = sorted([str(x) for x in df_melted['AREA'].dropna().unique()])
+    # Excluir "Operaciones" de las áreas disponibles
+    areas = [area for area in all_areas if area.lower() != 'operaciones']
     
-    # Checkbox para seleccionar todas las áreas
+    # Checkbox para seleccionar todas las áreas (excepto Operaciones)
     select_all_areas = st.sidebar.checkbox("Seleccionar todas las áreas", value=True)
     
     if select_all_areas:
@@ -666,36 +620,40 @@ def create_multiple_filters(df_melted):
             if st.sidebar.checkbox(f"🏢 {area}", key=f"area_{area}"):
                 selected_areas.append(area)
     
-    st.sidebar.markdown("---")
-    
-    # Filtro simple por cargo (mantenemos el selectbox original)
-    st.sidebar.write("💼 **Seleccionar Cargo:**")
-    cargos = ['Todos'] + sorted([str(x) for x in df_melted['CARGO'].dropna().unique()])
-    selected_cargo = st.sidebar.selectbox("💼 Cargo", cargos, key="cargo_filter")
-    
     # Mostrar resumen de selección
     st.sidebar.markdown("---")
     st.sidebar.write("📊 **Resumen de Filtros:**")
     st.sidebar.write(f"• **Países:** {len(selected_countries)} seleccionados")
     st.sidebar.write(f"• **Áreas:** {len(selected_areas)} seleccionadas")
-    st.sidebar.write(f"• **Cargo:** {selected_cargo}")
     
-    return selected_countries, selected_areas, selected_cargo
+    return selected_countries, selected_areas
 
-# Función para cargar y procesar datos
+# FUNCIÓN MODIFICADA: Cargar y procesar datos automáticamente
 @st.cache_data
-def load_data(file):
+def load_data():
     """
-    Carga y procesa el archivo Excel con los datos de uso de IA
+    Carga y procesa automáticamente el archivo Excel 'resultado_mes.xlsx' desde el directorio actual
     """
     try:
-        df = pd.read_excel(file)
+        # Construir la ruta del archivo en el directorio actual
+        file_path = os.path.join(os.getcwd(), "resultado_mes.xlsx")
+        
+        # Verificar si el archivo existe
+        if not os.path.exists(file_path):
+            st.error(f"❌ No se encontró el archivo 'resultado_mes.xlsx' en el directorio: {os.getcwd()}")
+            return None, None, None
+        
+        # Cargar el archivo Excel
+        df = pd.read_excel(file_path)
 
         # Limpiar valores nulos en las columnas básicas
         df['NOMBRE'] = df['NOMBRE'].fillna('Sin Nombre')
         df['PAIS'] = df['PAIS'].fillna('Sin País')
         df['CARGO'] = df['CARGO'].fillna('Sin Cargo')
         df['AREA'] = df['AREA'].fillna('Sin Área')
+
+        # MODIFICADO: Filtrar para excluir área de "Operaciones"
+        df = df[df['AREA'].str.lower() != 'operaciones']
 
         # Identificar columnas de meses (asumiendo que son las últimas columnas)
         basic_columns = ['NOMBRE', 'PAIS', 'CARGO', 'AREA']
@@ -717,18 +675,19 @@ def load_data(file):
         df_melted['usos_ia'] = pd.to_numeric(df_melted['usos_ia'], errors='coerce').fillna(0)
 
         return df, df_melted, month_columns_sorted
+        
     except Exception as e:
-        st.error(f"Error al cargar el archivo: {str(e)}")
+        st.error(f"❌ Error al cargar el archivo 'resultado_mes.xlsx': {str(e)}")
         return None, None, None
 
-# FUNCIÓN OPTIMIZADA: Crear métricas principales en 2 filas con nuevas métricas de adopción
+# FUNCIÓN OPTIMIZADA: Crear métricas principales en 2 filas con métricas de adopción
 def create_metrics(df_melted, filtered_data, selected_months):
     """
-    Calcula y muestra métricas principales del dashboard organizadas en 2 filas de 3 columnas cada una
-    Incluye las nuevas métricas de adopción: % Acumulado Adopción SAI y % Promedio Adopción SAI
+    Calcula y muestra métricas principales del dashboard organizadas en 2 filas de 2 columnas cada una
+    Solo incluye métricas relacionadas con adopción
     """
-    # PRIMERA FILA - 3 métricas principales
-    col1, col2, col3 = st.columns(3)
+    # PRIMERA FILA - 2 métricas principales
+    col1, col2 = st.columns(2)
 
     with col1:
         # Total Profesionales Elegibles
@@ -740,21 +699,11 @@ def create_metrics(df_melted, filtered_data, selected_months):
         active_users = filtered_data[filtered_data['usos_ia'] > 0]['NOMBRE'].nunique()
         st.metric("🚀 Total Usuarios Activos", active_users)
 
+    # SEGUNDA FILA - 2 métricas de adopción
+    col3, col4 = st.columns(2)
+
     with col3:
-        # Total de usos de IA
-        total_usage = int(filtered_data['usos_ia'].sum())
-        st.metric("📊 Usos Totales IA", f"{total_usage:,}")
-
-    # SEGUNDA FILA - 3 métricas adicionales (OPTIMIZADAS)
-    col4, col5, col6 = st.columns(3)
-
-    with col4:
-        # Promedio mensual
-        avg_usage = filtered_data['usos_ia'].mean()
-        st.metric("📈 Promedio Mensual", f"{avg_usage:.1f}")
-
-    with col5:
-        # NUEVA MÉTRICA: % Acumulado Adopción SAI (antes era % Adopción SAI)
+        # % Acumulado Adopción SAI
         users_with_usage = filtered_data[filtered_data['usos_ia'] > 0]['NOMBRE'].nunique()
         total_unique_users = filtered_data['NOMBRE'].nunique()
         
@@ -765,8 +714,8 @@ def create_metrics(df_melted, filtered_data, selected_months):
             
         st.metric("🎯 % Acumulado Adopción SAI", f"{cumulative_adoption_rate:.1f}%")
 
-    with col6:
-        # NUEVA MÉTRICA: % Promedio Adopción SAI
+    with col4:
+        # % Promedio Adopción SAI
         # Calcula el promedio de adopción por mes seleccionado
         monthly_adoption_rates = []
         
@@ -787,69 +736,10 @@ def create_metrics(df_melted, filtered_data, selected_months):
             
         st.metric("📊 % Promedio Adopción SAI", f"{average_adoption_rate:.1f}%")
 
-# NUEVA FUNCIÓN: Gráfico de distribución de adopción por área
-def create_adoption_distribution_by_area(filtered_data):
-    """
-    Crea gráfico de distribución de adopción por área (gráfico de dona)
-    """
-    # Calcular adopción por área
-    area_adoption = []
-    
-    for area in filtered_data['AREA'].unique():
-        area_data = filtered_data[filtered_data['AREA'] == area]
-        total_users = area_data['NOMBRE'].nunique()
-        active_users = area_data[area_data['usos_ia'] > 0]['NOMBRE'].nunique()
-        
-        adoption_rate = (active_users / total_users) * 100 if total_users > 0 else 0
-        
-        area_adoption.append({
-            'Área': area,
-            'Total_Usuarios': total_users,
-            'Usuarios_Activos': active_users,
-            'Porcentaje_Adopcion': adoption_rate
-        })
-    
-    adoption_df = pd.DataFrame(area_adoption)
-    adoption_df = adoption_df.sort_values('Porcentaje_Adopcion', ascending=False)
-    
-    # Crear gráfico de dona
-    fig = px.pie(
-        adoption_df,
-        values='Porcentaje_Adopcion',
-        names='Área',
-        title='🎯 Distribución de Adopción SAI por Área (%)',
-        hole=0.4,
-        color_discrete_sequence=px.colors.qualitative.Set3
-    )
-    
-    # Personalizar el gráfico
-    fig.update_traces(
-        textposition='inside',
-        textinfo='percent+label',
-        hovertemplate='<b>%{label}</b><br>' +
-                      'Adopción: %{value:.1f}%<br>' +
-                      'Total Usuarios: %{customdata[0]}<br>' +
-                      'Usuarios Activos: %{customdata[1]}<extra></extra>',
-        customdata=adoption_df[['Total_Usuarios', 'Usuarios_Activos']].values
-    )
-    
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(
-            orientation="v",
-            yanchor="middle",
-            y=0.5,
-            xanchor="left",
-            x=1.05
-        )
-    )
-    
-    return fig
-
-# FUNCIÓN OPTIMIZADA: Gráfico de adopción SAI vs País con ejes autoajustables
+# FUNCIÓN MODIFICADA: Gráfico de adopción SAI vs País con ejes fijos de 0 a 100%
 def create_adoption_by_country(filtered_data):
     """
-    Crea gráfico de % de adopción de SAI por país con ejes autoajustables
+    Crea gráfico de % de adopción de SAI por país con ejes fijos de 0 a 100%
     """
     # Calcular adopción por país
     country_adoption = []
@@ -882,12 +772,11 @@ def create_adoption_by_country(filtered_data):
         hover_data=['Total_Usuarios', 'Usuarios_Activos']
     )
     
-    # APLICAR EJES AUTOAJUSTABLES
-    fig = apply_axis_ranges(fig, y_values=adoption_df['Porcentaje_Adopcion'].tolist())
-    
+    # EJES FIJOS DE 0 A 100%
     fig.update_layout(
         xaxis_title="País",
         yaxis_title="% Adopción SAI",
+        yaxis=dict(range=[0, 100]),  # Eje Y fijo de 0 a 100%
         xaxis_tickangle=-45
     )
     
@@ -900,64 +789,11 @@ def create_adoption_by_country(filtered_data):
     
     return fig
 
-# FUNCIÓN OPTIMIZADA: Gráfico de adopción SAI por Cargo con ejes autoajustables
-def create_adoption_by_cargo(filtered_data):
-    """
-    Crea gráfico de % de adopción de SAI por cargo con ejes autoajustables
-    """
-    # Calcular adopción por cargo
-    cargo_adoption = []
-    
-    for cargo in filtered_data['CARGO'].unique():
-        cargo_data = filtered_data[filtered_data['CARGO'] == cargo]
-        total_users = cargo_data['NOMBRE'].nunique()
-        active_users = cargo_data[cargo_data['usos_ia'] > 0]['NOMBRE'].nunique()
-        
-        adoption_rate = (active_users / total_users) * 100 if total_users > 0 else 0
-        
-        cargo_adoption.append({
-            'Cargo': cargo,
-            'Total_Usuarios': total_users,
-            'Usuarios_Activos': active_users,
-            'Porcentaje_Adopcion': adoption_rate
-        })
-    
-    adoption_df = pd.DataFrame(cargo_adoption)
-    adoption_df = adoption_df.sort_values('Porcentaje_Adopcion', ascending=True)
-    
-    # Crear gráfico de barras horizontales
-    fig = px.bar(
-        adoption_df,
-        x='Porcentaje_Adopcion',
-        y='Cargo',
-        title='💼 % Adopción SAI por Cargo',
-        color='Porcentaje_Adopcion',
-        color_continuous_scale='plasma',
-        orientation='h',
-        hover_data=['Total_Usuarios', 'Usuarios_Activos']
-    )
-    
-    # APLICAR EJES AUTOAJUSTABLES
-    fig = apply_axis_ranges(fig, x_values=adoption_df['Porcentaje_Adopcion'].tolist())
-    
-    fig.update_layout(
-        xaxis_title="% Adopción SAI",
-        yaxis_title="Cargo"
-    )
-    
-    fig.update_traces(
-        hovertemplate='<b>%{y}</b><br>' +
-                      'Adopción: %{x:.1f}%<br>' +
-                      'Total Usuarios: %{customdata[0]}<br>' +
-                      'Usuarios Activos: %{customdata[1]}<extra></extra>'
-    )
-    
-    return fig
-
-# FUNCIÓN OPTIMIZADA: Mapa de calor de adopción SAI por País y Área con ejes autoajustables
+# FUNCIÓN MODIFICADA: Mapa de calor de adopción SAI por País y Área - OPTIMIZADA CON COLORES ROJO-VERDE
 def create_adoption_heatmap(filtered_data):
     """
-    Crea mapa de calor de % de adopción de SAI por país y área con ejes autoajustables
+    Crea mapa de calor de % de adopción de SAI por País y Área
+    OPTIMIZADO: Colores rojos para valores bajos y verdes para valores altos
     """
     # Calcular adopción por país y área
     adoption_data = []
@@ -996,53 +832,41 @@ def create_adoption_heatmap(filtered_data):
     
     adoption_df = pd.DataFrame(adoption_data)
     
-    # Crear pivot table para el heatmap
-    heatmap_pivot = adoption_df.pivot(
-        index='País', 
-        columns='Área', 
-        values='Porcentaje_Adopcion'
-    ).fillna(0)
+    # Crear matriz pivot para el heatmap
+    heatmap_data = adoption_df.pivot(index='Área', columns='País', values='Porcentaje_Adopcion')
     
-    # Obtener valores para calcular rango de colores
-    all_values = heatmap_pivot.values.flatten()
-    all_values = [v for v in all_values if not pd.isna(v)]
-    
-    # Calcular rango de colores con margen
-    if all_values:
-        color_range = calculate_axis_range(all_values)
-        zmin, zmax = color_range
-    else:
-        zmin, zmax = 0, 100
-    
-    # Crear heatmap
+    # OPTIMIZACIÓN PRINCIPAL: Cambiar escala de colores a rojo-verde
+    # Rojo para valores bajos, verde para valores altos
     fig = px.imshow(
-        heatmap_pivot,
+        heatmap_data,
         title='🔥 Mapa de Calor: % Adopción SAI por País y Área',
-        color_continuous_scale='RdYlBu_r',
+        color_continuous_scale='RdYlGn',  # CAMBIO: De 'RdYlBu_r' a 'RdYlGn' (rojo-amarillo-verde)
         aspect='auto',
-        labels=dict(color="% Adopción SAI"),
-        zmin=zmin,
-        zmax=zmax
+        labels=dict(x="País", y="Área", color="% Adopción")
     )
     
+    # Personalizar el heatmap
     fig.update_layout(
-        xaxis_title="Área",
-        yaxis_title="País"
+        xaxis_title="País",
+        yaxis_title="Área",
+        coloraxis_colorbar=dict(title="% Adopción SAI")
     )
     
     # Añadir valores de texto en cada celda
     fig.update_traces(
-        text=heatmap_pivot.round(1),
-        texttemplate="%{text}%",
+        hovertemplate='<b>País:</b> %{x}<br>' +
+                      '<b>Área:</b> %{y}<br>' +
+                      '<b>Adopción:</b> %{z:.1f}%<extra></extra>',
+        texttemplate="%{z:.1f}%",
         textfont={"size": 10}
     )
     
     return fig
 
-# FUNCIÓN OPTIMIZADA: Gráfico de % Adopción vs Tiempo con ejes autoajustables
+# FUNCIÓN OPTIMIZADA: Gráfico de % Adopción vs Tiempo
 def create_adoption_trend(filtered_data, selected_months):
     """
-    Crea gráfico de tendencia de % de adopción a lo largo del tiempo con ejes autoajustables
+    Crea gráfico de tendencia de % de adopción a lo largo del tiempo
     """
     # Ordenar los meses seleccionados cronológicamente
     selected_months_sorted = sort_months_chronologically(selected_months)
@@ -1099,9 +923,6 @@ def create_adoption_trend(filtered_data, selected_months):
             hovertemplate='Tendencia: %{y:.1f}%<extra></extra>'
         ))
     
-    # APLICAR EJES AUTOAJUSTABLES
-    fig = apply_axis_ranges(fig, y_values=adoption_df['Porcentaje_Adopcion'].tolist())
-    
     fig.update_layout(
         title='📈 Evolución del % de Adopción de SAI por Mes',
         xaxis_title='Mes',
@@ -1113,422 +934,225 @@ def create_adoption_trend(filtered_data, selected_months):
     
     return fig
 
-# FUNCIÓN OPTIMIZADA: Gráfico de tendencia temporal con ejes autoajustables
-def create_time_trend(filtered_data, month_columns_sorted):
-    """
-    Crea gráfico de tendencia temporal de uso de IA con meses ordenados y ejes autoajustables
-    """
-    monthly_usage = filtered_data.groupby('Mes')['usos_ia'].sum().reset_index()
-    
-    # Crear un mapeo de orden para los meses
-    month_order = {month: i for i, month in enumerate(month_columns_sorted)}
-    monthly_usage['order'] = monthly_usage['Mes'].map(month_order)
-    monthly_usage = monthly_usage.sort_values('order')
-
-    fig = px.line(
-        monthly_usage,
-        x='Mes',
-        y='usos_ia',
-        title='📈 Tendencia de Uso de IA por Mes',
-        markers=True
-    )
-
-    # APLICAR EJES AUTOAJUSTABLES
-    fig = apply_axis_ranges(fig, y_values=monthly_usage['usos_ia'].tolist())
-
-    fig.update_layout(
-        xaxis_title="Mes",
-        yaxis_title="Usos de IA",
-        hovermode='x unified'
-    )
-
-    return fig
-
-# FUNCIÓN OPTIMIZADA: Gráfico por país con ejes autoajustables
-def create_country_analysis(filtered_data):
-    """
-    Crea análisis por país con gráfico de barras y ejes autoajustables
-    """
-    country_data = filtered_data.groupby('PAIS')['usos_ia'].sum().reset_index()
-    country_data = country_data.sort_values('usos_ia', ascending=False)
-
-    fig = px.bar(
-        country_data,
-        x='PAIS',
-        y='usos_ia',
-        title='🌎 Uso de IA por País',
-        color='usos_ia',
-        color_continuous_scale='viridis'
-    )
-
-    # APLICAR EJES AUTOAJUSTABLES
-    fig = apply_axis_ranges(fig, y_values=country_data['usos_ia'].tolist())
-
-    fig.update_layout(
-        xaxis_title="País",
-        yaxis_title="Usos de IA",
-        xaxis_tickangle=-45
-    )
-
-    return fig
-
-# FUNCIÓN OPTIMIZADA: Gráfico por área (mantiene formato de dona)
-def create_area_analysis(filtered_data):
-    """
-    Crea análisis por área con gráfico de dona (sin cambios en ejes)
-    """
-    area_data = filtered_data.groupby('AREA')['usos_ia'].sum().reset_index()
-
-    fig = px.pie(
-        area_data,
-        values='usos_ia',
-        names='AREA',
-        title='🏢 Distribución de Uso por Área',
-        hole=0.4
-    )
-
-    fig.update_traces(textposition='inside', textinfo='percent+label')
-
-    return fig
-
-# FUNCIÓN OPTIMIZADA: Gráfico por cargo con ejes autoajustables
-def create_cargo_analysis(filtered_data):
-    """
-    Crea análisis por cargo con gráfico de barras horizontales y ejes autoajustables
-    """
-    cargo_data = filtered_data.groupby('CARGO')['usos_ia'].sum().reset_index()
-    cargo_data = cargo_data.sort_values('usos_ia', ascending=True)
-
-    fig = px.bar(
-        cargo_data,
-        x='usos_ia',
-        y='CARGO',
-        title='💼 Uso de IA por Cargo',
-        color='usos_ia',
-        color_continuous_scale='plasma',
-        orientation='h'
-    )
-
-    # APLICAR EJES AUTOAJUSTABLES
-    fig = apply_axis_ranges(fig, x_values=cargo_data['usos_ia'].tolist())
-
-    fig.update_layout(
-        xaxis_title="Usos de IA",
-        yaxis_title="Cargo"
-    )
-
-    return fig
-
-# FUNCIÓN OPTIMIZADA: Heatmap de uso por país y área con ejes autoajustables
-def create_heatmap(filtered_data):
-    """
-    Crea heatmap de uso de IA por país y área con ejes autoajustables
-    """
-    heatmap_data = filtered_data.groupby(['PAIS', 'AREA'])['usos_ia'].sum().reset_index()
-    heatmap_pivot = heatmap_data.pivot(index='PAIS', columns='AREA', values='usos_ia').fillna(0)
-
-    # Obtener valores para calcular rango de colores
-    all_values = heatmap_pivot.values.flatten()
-    all_values = [v for v in all_values if not pd.isna(v)]
-    
-    # Calcular rango de colores con margen
-    if all_values:
-        color_range = calculate_axis_range(all_values)
-        zmin, zmax = color_range
-    else:
-        zmin, zmax = 0, 100
-
-    fig = px.imshow(
-        heatmap_pivot,
-        title='🔥 Mapa de Calor: Uso por País y Área',
-        color_continuous_scale='RdYlBu_r',
-        aspect='auto',
-        zmin=zmin,
-        zmax=zmax
-    )
-
-    fig.update_layout(
-        xaxis_title="Área",
-        yaxis_title="País"
-    )
-
-    return fig
-
-# Función para top usuarios (sin cambios)
-def create_top_users(filtered_data):
-    """
-    Muestra tabla de top usuarios por uso de IA
-    """
-    top_users = filtered_data.groupby(['NOMBRE', 'PAIS', 'CARGO', 'AREA'])['usos_ia'].sum().reset_index()
-    top_users = top_users.sort_values('usos_ia', ascending=False).head(10)
-
-    return top_users
-
-# NUEVA FUNCIÓN: Crear tabla de análisis de adopción detallado
-def create_adoption_analysis_table(filtered_data, month_columns_sorted, selected_months):
-    """
-    Crea tabla detallada de análisis de adopción por mes
-    """
-    adoption_data = []
-    
-    for month in month_columns_sorted:
-        if month in selected_months:
-            month_data = filtered_data[filtered_data['Mes'] == month]
-            total_users = month_data['NOMBRE'].nunique()
-            users_with_usage = month_data[month_data['usos_ia'] > 0]['NOMBRE'].nunique()
-            users_without_usage = total_users - users_with_usage
-            
-            adoption_percentage = (users_with_usage / total_users) * 100 if total_users > 0 else 0
-            
-            adoption_data.append({
-                'Mes': month,
-                'Total Usuarios': total_users,
-                'Usuarios Activos': users_with_usage,
-                'Usuarios Inactivos': users_without_usage,
-                '% Adopción': round(adoption_percentage, 1)
-            })
-    
-    return pd.DataFrame(adoption_data)
-
 # ==========================================
-# NUEVAS FUNCIONES PARA RANKINGS
+# FUNCIONES PARA RANKINGS OPTIMIZADAS (3 TABLAS)
 # ==========================================
 
-def create_top_5_users_ranking(filtered_data):
+def create_top_5_users_by_usage(filtered_data):
     """
-    Crea tabla de ranking con los top 5 usuarios que más usan SAI en el período filtrado
-    
-    Args:
-        filtered_data: DataFrame con datos filtrados
-    
-    Returns:
-        pd.DataFrame: DataFrame con el ranking de top 5 usuarios
+    Crea tabla de ranking con los top 5 usuarios por uso total de SAI
     """
-    # Agrupar por usuario y sumar todos los usos de SAI
-    user_ranking = filtered_data.groupby(['NOMBRE', 'PAIS', 'CARGO', 'AREA']).agg({
+    # Calcular uso total por usuario
+    user_usage = filtered_data.groupby(['NOMBRE', 'PAIS', 'AREA', 'CARGO']).agg({
         'usos_ia': 'sum'
     }).reset_index()
     
-    # Ordenar por usos de IA de mayor a menor y tomar top 5
-    user_ranking = user_ranking.sort_values('usos_ia', ascending=False).head(5)
+    # Ordenar por uso total de mayor a menor y tomar top 5
+    user_usage = user_usage.sort_values('usos_ia', ascending=False).head(5)
     
     # Agregar columna de posición
-    user_ranking.insert(0, 'Posición', range(1, len(user_ranking) + 1))
+    user_usage.insert(0, 'Posición', range(1, len(user_usage) + 1))
     
     # Renombrar columnas para mejor presentación
-    user_ranking = user_ranking.rename(columns={
-        'NOMBRE': 'Nombre',
+    user_usage = user_usage.rename(columns={
+        'NOMBRE': 'Usuario',
         'PAIS': 'País',
-        'CARGO': 'Cargo',
         'AREA': 'Área',
+        'CARGO': 'Cargo',
         'usos_ia': 'Total Usos SAI'
     })
     
-    return user_ranking
+    return user_usage
 
-def create_country_ranking(filtered_data):
+def create_top_5_countries_by_usage(filtered_data):
     """
-    Crea tabla de ranking por país basado en el total de usos de SAI
-    
-    Args:
-        filtered_data: DataFrame con datos filtrados
-    
-    Returns:
-        pd.DataFrame: DataFrame con el ranking por países
+    Crea tabla de ranking con los top 5 países por uso total de SAI
     """
-    # Agrupar por país y calcular métricas
-    country_ranking = filtered_data.groupby('PAIS').agg({
-        'NOMBRE': 'nunique',  # Usuarios únicos
-        'usos_ia': 'sum'      # Total de usos
+    # Calcular uso total por país
+    country_usage = filtered_data.groupby('PAIS').agg({
+        'usos_ia': 'sum',
+        'NOMBRE': 'nunique'
     }).reset_index()
     
-    # Calcular usuarios activos por país
-    active_users_by_country = filtered_data[filtered_data['usos_ia'] > 0].groupby('PAIS')['NOMBRE'].nunique().reset_index()
-    active_users_by_country = active_users_by_country.rename(columns={'NOMBRE': 'usuarios_activos'})
-    
-    # Unir con el ranking principal
-    country_ranking = country_ranking.merge(active_users_by_country, on='PAIS', how='left')
-    country_ranking['usuarios_activos'] = country_ranking['usuarios_activos'].fillna(0)
-    
-    # Calcular porcentaje de adopción por país
-    country_ranking['porcentaje_adopcion'] = (
-        country_ranking['usuarios_activos'] / country_ranking['NOMBRE'] * 100
-    ).round(1)
-    
-    # Calcular promedio de usos por usuario activo
-    country_ranking['promedio_usos_por_usuario'] = (
-        country_ranking['usos_ia'] / country_ranking['usuarios_activos']
-    ).fillna(0).round(1)
-    
-    # Ordenar por total de usos de IA de mayor a menor
-    country_ranking = country_ranking.sort_values('usos_ia', ascending=False)
+    # Ordenar por uso total de mayor a menor y tomar top 5
+    country_usage = country_usage.sort_values('usos_ia', ascending=False).head(5)
     
     # Agregar columna de posición
-    country_ranking.insert(0, 'Posición', range(1, len(country_ranking) + 1))
+    country_usage.insert(0, 'Posición', range(1, len(country_usage) + 1))
     
     # Renombrar columnas para mejor presentación
-    country_ranking = country_ranking.rename(columns={
+    country_usage = country_usage.rename(columns={
         'PAIS': 'País',
-        'NOMBRE': 'Total Usuarios',
         'usos_ia': 'Total Usos SAI',
-        'usuarios_activos': 'Usuarios Activos',
-        'porcentaje_adopcion': '% Adopción',
-        'promedio_usos_por_usuario': 'Promedio Usos/Usuario Activo'
+        'NOMBRE': 'Total Usuarios'
     })
     
-    return country_ranking
+    return country_usage
+
+def create_top_5_countries_by_adoption(filtered_data):
+    """
+    Crea tabla de ranking con los top 5 países por porcentaje de adopción de SAI
+    """
+    # Calcular adopción por país
+    country_adoption = []
+    
+    for country in filtered_data['PAIS'].unique():
+        country_data = filtered_data[filtered_data['PAIS'] == country]
+        total_users = country_data['NOMBRE'].nunique()
+        active_users = country_data[country_data['usos_ia'] > 0]['NOMBRE'].nunique()
+        
+        adoption_rate = (active_users / total_users) * 100 if total_users > 0 else 0
+        
+        country_adoption.append({
+            'País': country,
+            'Total_Usuarios': total_users,
+            'Usuarios_Activos': active_users,
+            'Porcentaje_Adopcion': adoption_rate
+        })
+    
+    adoption_df = pd.DataFrame(country_adoption)
+    
+    # Ordenar por porcentaje de adopción de mayor a menor y tomar top 5
+    adoption_df = adoption_df.sort_values('Porcentaje_Adopcion', ascending=False).head(5)
+    
+    # Agregar columna de posición
+    adoption_df.insert(0, 'Posición', range(1, len(adoption_df) + 1))
+    
+    # Renombrar columnas para mejor presentación
+    adoption_df = adoption_df.rename(columns={
+        'Total_Usuarios': 'Total Usuarios',
+        'Usuarios_Activos': 'Usuarios Activos',
+        'Porcentaje_Adopcion': '% Adopción'
+    })
+    
+    # Redondear porcentaje de adopción
+    adoption_df['% Adopción'] = adoption_df['% Adopción'].round(1)
+    
+    return adoption_df
 
 def show_rankings_section(filtered_data):
     """
-    Muestra la sección completa de rankings con tablas y visualizaciones
-    
-    Args:
-        filtered_data: DataFrame con datos filtrados
+    Muestra la sección de rankings con 3 tablas: Top 5 Usuarios, Top 5 Países por Uso y Top 5 Países por Adopción
     """
-    st.subheader("🏆 Rankings y Clasificaciones")
-    st.markdown("Análisis de los mejores performers en el uso de SAI durante el período seleccionado.")
+    st.subheader("🏆 Rankings SAI")
+    st.markdown("Análisis de los mejores performers durante el período seleccionado.")
     
-    # Crear dos columnas para mostrar los rankings lado a lado
-    col1, col2 = st.columns(2)
+    # Crear las tres tablas de ranking
+    top_5_users = create_top_5_users_by_usage(filtered_data)
+    top_5_countries_usage = create_top_5_countries_by_usage(filtered_data)
+    top_5_countries_adoption = create_top_5_countries_by_adoption(filtered_data)
     
+    # Organizar en 3 columnas para mostrar las tablas lado a lado
+    col1, col2, col3 = st.columns(3)
+    
+    # TABLA 1: Top 5 Usuarios de SAI
     with col1:
-        st.markdown("### 👑 Top 5 Usuarios SAI")
-        st.markdown("*Los 5 usuarios con mayor uso de SAI en el período filtrado*")
-        
-        # Crear y mostrar tabla de top 5 usuarios
-        top_5_users = create_top_5_users_ranking(filtered_data)
-        
+        st.markdown("#### 👤 Top 5 Usuarios de SAI")
         if len(top_5_users) > 0:
-            # Aplicar estilo a la tabla
-            st.dataframe(
-                top_5_users,
-                use_container_width=True,
-                hide_index=True
-            )
+            st.dataframe(top_5_users, use_container_width=True, hide_index=True)
             
-            # Botón de descarga para top 5 usuarios
-            csv_top_5 = top_5_users.to_csv(index=False)
+            # Botón de descarga
+            csv_users = top_5_users.to_csv(index=False)
             st.download_button(
-                label="📥 Descargar Top 5 Usuarios",
-                data=csv_top_5,
+                label="📥 Descargar",
+                data=csv_users,
                 file_name=f'top_5_usuarios_sai_{datetime.now().strftime("%Y%m%d")}.csv',
                 mime='text/csv',
                 key="download_top_5_users"
             )
-            
-            # Mostrar insights del top 5
-            if len(top_5_users) > 0:
-                top_user = top_5_users.iloc[0]
-                total_top_5_usage = top_5_users['Total Usos SAI'].sum()
-                st.info(f"""
-                **🎯 Insights del Top 5:**
-                - **Líder:** {top_user['Nombre']} ({top_user['País']}) con {top_user['Total Usos SAI']} usos
-                - **Total combinado:** {total_top_5_usage:,} usos de SAI
-                - **Promedio Top 5:** {total_top_5_usage/len(top_5_users):.1f} usos por usuario
-                """)
         else:
-            st.warning("⚠️ No hay datos suficientes para generar el ranking de usuarios.")
+            st.warning("⚠️ No hay datos suficientes")
     
+    # TABLA 2: Top 5 Países por Uso
     with col2:
-        st.markdown("### 🌍 Ranking por Países")
-        st.markdown("*Clasificación de países por desempeño en uso de SAI*")
-        
-        # Crear y mostrar tabla de ranking por países
-        country_ranking = create_country_ranking(filtered_data)
-        
-        if len(country_ranking) > 0:
-            # Aplicar estilo a la tabla
-            st.dataframe(
-                country_ranking,
-                use_container_width=True,
-                hide_index=True
-            )
+        st.markdown("#### 🌍 Top 5 Países por Uso")
+        if len(top_5_countries_usage) > 0:
+            st.dataframe(top_5_countries_usage, use_container_width=True, hide_index=True)
             
-            # Botón de descarga para ranking de países
-            csv_countries = country_ranking.to_csv(index=False)
+            # Botón de descarga
+            csv_countries_usage = top_5_countries_usage.to_csv(index=False)
             st.download_button(
-                label="📥 Descargar Ranking Países",
-                data=csv_countries,
-                file_name=f'ranking_paises_sai_{datetime.now().strftime("%Y%m%d")}.csv',
+                label="📥 Descargar",
+                data=csv_countries_usage,
+                file_name=f'top_5_paises_uso_{datetime.now().strftime("%Y%m%d")}.csv',
                 mime='text/csv',
-                key="download_country_ranking"
+                key="download_top_5_countries_usage"
             )
-            
-            # Mostrar insights del ranking de países
-            if len(country_ranking) > 0:
-                top_country = country_ranking.iloc[0]
-                total_countries = len(country_ranking)
-                total_usage_all = country_ranking['Total Usos SAI'].sum()
-                st.info(f"""
-                **🎯 Insights por País:**
-                - **País líder:** {top_country['País']} con {top_country['Total Usos SAI']:,} usos
-                - **Total países:** {total_countries}
-                - **Uso total combinado:** {total_usage_all:,} usos de SAI
-                - **Mejor adopción:** {country_ranking.loc[country_ranking['% Adopción'].idxmax(), 'País']} ({country_ranking['% Adopción'].max():.1f}%)
-                """)
         else:
-            st.warning("⚠️ No hay datos suficientes para generar el ranking de países.")
+            st.warning("⚠️ No hay datos suficientes")
     
-    # Sección adicional: Gráficos de rankings
+    # TABLA 3: Top 5 Países por Adopción
+    with col3:
+        st.markdown("#### 🎯 Top 5 Países por Adopción")
+        if len(top_5_countries_adoption) > 0:
+            st.dataframe(top_5_countries_adoption, use_container_width=True, hide_index=True)
+            
+            # Botón de descarga
+            csv_countries_adoption = top_5_countries_adoption.to_csv(index=False)
+            st.download_button(
+                label="📥 Descargar",
+                data=csv_countries_adoption,
+                file_name=f'top_5_paises_adopcion_{datetime.now().strftime("%Y%m%d")}.csv',
+                mime='text/csv',
+                key="download_top_5_countries_adoption"
+            )
+        else:
+            st.warning("⚠️ No hay datos suficientes")
+    
+    # Mostrar insights de los líderes
     st.markdown("---")
-    st.markdown("### 📊 Visualizaciones de Rankings")
+    st.markdown("#### 📊 Insights de Liderazgo")
     
-    # Crear pestañas para diferentes visualizaciones
-    tab_users, tab_countries = st.tabs(["👑 Gráfico Top Usuarios", "🌍 Gráfico Países"])
+    # Crear 3 columnas para los insights
+    insight_col1, insight_col2, insight_col3 = st.columns(3)
     
-    with tab_users:
+    # Insight del usuario líder
+    with insight_col1:
         if len(top_5_users) > 0:
-            # Gráfico de barras para top 5 usuarios
-            fig_users = px.bar(
-                top_5_users,
-                x='Nombre',
-                y='Total Usos SAI',
-                title='🏆 Top 5 Usuarios por Uso de SAI',
-                color='Total Usos SAI',
-                color_continuous_scale='viridis',
-                text='Total Usos SAI'
-            )
+            top_user = top_5_users.iloc[0]
+            st.info(f"""
+            **🥇 Usuario Líder:**
             
-            fig_users.update_traces(texttemplate='%{text}', textposition='outside')
-            fig_users.update_layout(
-                xaxis_title="Usuario",
-                yaxis_title="Total Usos SAI",
-                xaxis_tickangle=-45,
-                showlegend=False
-            )
+            **{top_user['Usuario']}**
             
-            # Aplicar ejes autoajustables
-            fig_users = apply_axis_ranges(fig_users, y_values=top_5_users['Total Usos SAI'].tolist())
+            📊 **{top_user['Total Usos SAI']}** usos totales
             
-            st.plotly_chart(fig_users, use_container_width=True)
+            🌍 **{top_user['País']}** - **{top_user['Área']}**
+            """)
         else:
-            st.info("📊 No hay suficientes datos para mostrar el gráfico de top usuarios.")
+            st.warning("Sin datos de usuarios")
     
-    with tab_countries:
-        if len(country_ranking) > 0:
-            # Gráfico de barras para ranking de países
-            fig_countries = px.bar(
-                country_ranking.head(10),  # Mostrar solo top 10 países
-                x='País',
-                y='Total Usos SAI',
-                title='🌍 Ranking de Países por Uso Total de SAI',
-                color='% Adopción',
-                color_continuous_scale='plasma',
-                hover_data=['Total Usuarios', 'Usuarios Activos', '% Adopción']
-            )
+    # Insight del país líder por uso
+    with insight_col2:
+        if len(top_5_countries_usage) > 0:
+            top_country_usage = top_5_countries_usage.iloc[0]
+            st.success(f"""
+            **🥇 País Líder en Uso:**
             
-            fig_countries.update_layout(
-                xaxis_title="País",
-                yaxis_title="Total Usos SAI",
-                xaxis_tickangle=-45
-            )
+            **{top_country_usage['País']}**
             
-            # Aplicar ejes autoajustables
-            fig_countries = apply_axis_ranges(fig_countries, y_values=country_ranking['Total Usos SAI'].tolist())
+            📊 **{top_country_usage['Total Usos SAI']}** usos totales
             
-            st.plotly_chart(fig_countries, use_container_width=True)
+            👥 **{top_country_usage['Total Usuarios']}** usuarios
+            """)
         else:
-            st.info("📊 No hay suficientes datos para mostrar el gráfico de países.")
+            st.warning("Sin datos de países")
+    
+    # Insight del país líder por adopción
+    with insight_col3:
+        if len(top_5_countries_adoption) > 0:
+            top_country_adoption = top_5_countries_adoption.iloc[0]
+            st.info(f"""
+            **🥇 País Líder en Adopción:**
+            
+            **{top_country_adoption['País']}**
+            
+            📊 **{top_country_adoption['% Adopción']}%** de adopción
+            
+            👥 **{top_country_adoption['Usuarios Activos']}**/**{top_country_adoption['Total Usuarios']}** usuarios
+            """)
+        else:
+            st.warning("Sin datos de adopción")
 
 # FUNCIÓN OPTIMIZADA: Mostrar mensaje de advertencia cuando no hay meses seleccionados
 def show_no_months_warning():
@@ -1578,340 +1202,205 @@ def show_no_filters_warning():
     </div>
     """, unsafe_allow_html=True)
 
-# Aplicación principal
+# FUNCIÓN PRINCIPAL MODIFICADA: Aplicación principal con carga automática
 def main():
     # Título principal
-    st.title("🤖 Dashboard de Análisis de SAI - Áreas internas")
+    st.title("🤖 Dashboard de Análisis de Adopción SAI - Áreas internas")
     st.markdown("---")
 
-    # Sidebar para carga de archivo y filtros
-    st.sidebar.header("📁 Configuración")
+    # CAMBIO PRINCIPAL: Cargar datos automáticamente
+    st.sidebar.header("📁 Estado del Archivo")
+    
+    # Mostrar información del archivo que se está cargando
+    st.sidebar.info("📄 **Archivo:** resultado_mes.xlsx\n\n📂 **Ubicación:** Directorio actual")
+    
+    # Cargar datos automáticamente
+    with st.spinner("🔄 Cargando archivo resultado_mes.xlsx..."):
+        df_original, df_melted, month_columns_sorted = load_data()
 
-    # Carga de archivo
-    uploaded_file = st.sidebar.file_uploader(
-        "Cargar archivo Excel",
-        type=['xlsx', 'xls'],
-        help="Sube tu archivo Excel con las columnas: NOMBRE, PAIS, CARGO, AREA y meses"
-    )
+    if df_melted is not None:
+        # Mostrar confirmación de carga exitosa
+        st.sidebar.success("✅ Archivo cargado exitosamente")
+        st.sidebar.write(f"📊 **Registros:** {len(df_melted)}")
+        st.sidebar.write(f"👥 **Usuarios únicos:** {df_melted['NOMBRE'].nunique()}")
+        st.sidebar.write(f"📅 **Meses disponibles:** {len(month_columns_sorted)}")
+        
+        # Filtros en sidebar
+        st.sidebar.header("🔍 Filtros")
 
-    if uploaded_file is not None:
-        # Cargar datos
-        df_original, df_melted, month_columns_sorted = load_data(uploaded_file)
+        # FILTROS DINÁMICOS OPTIMIZADOS: Crear filtros temporales dinámicos
+        selected_months, filter_type = create_dynamic_filters(month_columns_sorted)
 
-        if df_melted is not None:
-            # Filtros en sidebar
-            st.sidebar.header("🔍 Filtros")
+        # Separador visual
+        st.sidebar.markdown("---")
 
-            # FILTROS DINÁMICOS OPTIMIZADOS: Crear filtros temporales dinámicos
-            selected_months, filter_type = create_dynamic_filters(month_columns_sorted)
+        # FILTROS MÚLTIPLES MODIFICADOS: Sin filtro de cargo
+        selected_countries, selected_areas = create_multiple_filters(df_melted)
 
-            # Separador visual
-            st.sidebar.markdown("---")
+        # VALIDACIÓN PRINCIPAL: Verificar si hay meses seleccionados
+        if not selected_months:
+            show_no_months_warning()
+            return
 
-            # NUEVOS FILTROS MÚLTIPLES: Crear filtros múltiples con checkboxes
-            selected_countries, selected_areas, selected_cargo = create_multiple_filters(df_melted)
+        # NUEVA VALIDACIÓN: Verificar si hay países y áreas seleccionados
+        if not selected_countries or not selected_areas:
+            show_no_filters_warning()
+            return
 
-            # VALIDACIÓN PRINCIPAL: Verificar si hay meses seleccionados
-            if not selected_months:
-                show_no_months_warning()
-                return
+        # NUEVA FUNCIONALIDAD: Validar condiciones para mostrar gráficos
+        chart_conditions = validate_chart_conditions(selected_months, selected_countries, selected_areas)
 
-            # NUEVA VALIDACIÓN: Verificar si hay países y áreas seleccionados
-            if not selected_countries or not selected_areas:
-                show_no_filters_warning()
-                return
+        # Aplicar filtros
+        filtered_data = df_melted.copy()
 
-            # NUEVA FUNCIONALIDAD: Validar condiciones para mostrar gráficos
-            chart_conditions = validate_chart_conditions(selected_months, selected_countries, selected_areas)
+        # Filtrar por países seleccionados
+        filtered_data = filtered_data[filtered_data['PAIS'].isin(selected_countries)]
 
-            # Aplicar filtros
-            filtered_data = df_melted.copy()
+        # Filtrar por áreas seleccionadas
+        filtered_data = filtered_data[filtered_data['AREA'].isin(selected_areas)]
 
-            # Filtrar por países seleccionados
-            filtered_data = filtered_data[filtered_data['PAIS'].isin(selected_countries)]
+        # Filtrar por meses seleccionados
+        filtered_data = filtered_data[filtered_data['Mes'].isin(selected_months)]
 
-            # Filtrar por áreas seleccionadas
-            filtered_data = filtered_data[filtered_data['AREA'].isin(selected_areas)]
+        # Mostrar información del filtro aplicado (SIN CARGO)
+        st.info(f"📊 **Filtro temporal:** {filter_type} | **Meses:** {len(selected_months)} | **Países:** {len(selected_countries)} | **Áreas:** {len(selected_areas)}")
 
-            # Filtrar por cargo (si no es "Todos")
-            if selected_cargo != 'Todos':
-                filtered_data = filtered_data[filtered_data['CARGO'] == selected_cargo]
+        # SECCIÓN OPTIMIZADA: Mostrar métricas principales en 2 filas (ACTUALIZADA)
+        st.header("📊 Métricas Principales")
+        create_metrics(df_melted, filtered_data, selected_months)
+        st.markdown("---")
 
-            # Filtrar por meses seleccionados
-            filtered_data = filtered_data[filtered_data['Mes'].isin(selected_months)]
+        # ==========================================
+        # SECCIÓN: RESUMEN INTELIGENTE CON LLM (SIN CARGO)
+        # ==========================================
+        show_llm_summary_section(filtered_data, selected_months, selected_countries, selected_areas, filter_type)
+        st.markdown("---")
 
-            # Mostrar información del filtro aplicado
-            st.info(f"📊 **Filtro temporal:** {filter_type} | **Meses:** {len(selected_months)} | **Países:** {len(selected_countries)} | **Áreas:** {len(selected_areas)}")
-
-            # SECCIÓN OPTIMIZADA: Mostrar métricas principales en 2 filas (ACTUALIZADA)
-            st.header("📊 Métricas Principales")
-            create_metrics(df_melted, filtered_data, selected_months)
-            st.markdown("---")
-
-            # ==========================================
-            # NUEVA SECCIÓN: RESUMEN INTELIGENTE CON LLM
-            # ==========================================
-            show_llm_summary_section(filtered_data, selected_months, selected_countries, selected_areas, selected_cargo, filter_type)
-            st.markdown("---")
-
-            # ==========================================
-            # NUEVA SECCIÓN: PESTAÑAS PRINCIPALES CON VALIDACIONES
-            # ==========================================
+        # ==========================================
+        # SECCIÓN PRINCIPAL: ANÁLISIS DE ADOPCIÓN SAI CON DESCRIPCIONES DINÁMICAS OPTIMIZADAS
+        # ==========================================
+        st.header("🎯 Análisis de Adopción SAI")
+        
+        # Gráfico 1: Evolución de Adopción (VALIDACIÓN: solo si hay más de 1 mes)
+        st.subheader("📈 Evolución del % de Adopción por Mes")
+        if chart_conditions['show_adoption_trend']:
+            # DESCRIPCIÓN COMPLETAMENTE OPTIMIZADA CON FILTROS DINÁMICOS
+            description = generate_chart_description('trend', selected_months, selected_countries, selected_areas)
+            st.markdown(f"*{description}*")
             
-            # Crear pestañas principales para separar análisis de Adopción y Uso
-            tab_adopcion, tab_uso = st.tabs(["🎯 Análisis de Adopción SAI", "📊 Análisis de Uso SAI"])
+            fig_adoption_trend = create_adoption_trend(filtered_data, selected_months)
+            st.plotly_chart(fig_adoption_trend, use_container_width=True)
+        else:
+            show_chart_requirement_message("adoption_trend", "multiple_months")
+        st.markdown("---")
+        
+        # Gráfico 2: Adopción por País (VALIDACIÓN: solo si hay más de 1 país)
+        st.subheader("🌎 % Adopción SAI por País")
+        if chart_conditions['show_adoption_by_country']:
+            # DESCRIPCIÓN COMPLETAMENTE OPTIMIZADA CON FILTROS DINÁMICOS
+            description = generate_chart_description('country', selected_months, selected_countries, selected_areas)
+            st.markdown(f"*{description}*")
             
-            # ==========================================
-            # PESTAÑA 1: ANÁLISIS DE ADOPCIÓN SAI CON VALIDACIONES
-            # ==========================================
-            with tab_adopcion:
-                st.header("🎯 Análisis de Adopción SAI")
-                
-                # Gráfico 1: Evolución de Adopción (VALIDACIÓN: solo si hay más de 1 mes)
-                st.subheader("📈 Evolución del % de Adopción por Mes")
-                if chart_conditions['show_adoption_trend']:
-                    fig_adoption_trend = create_adoption_trend(filtered_data, selected_months)
-                    st.plotly_chart(fig_adoption_trend, use_container_width=True)
-                else:
-                    show_chart_requirement_message("adoption_trend", "multiple_months")
-                st.markdown("---")
-                
-                # Gráfico 2: Adopción por País (VALIDACIÓN: solo si hay más de 1 país)
-                st.subheader("🌎 % Adopción SAI por País")
-                if chart_conditions['show_adoption_by_country']:
-                    fig_adoption_country = create_adoption_by_country(filtered_data)
-                    st.plotly_chart(fig_adoption_country, use_container_width=True)
-                else:
-                    show_chart_requirement_message("adoption_by_country", "multiple_countries")
-                st.markdown("---")
-                
-                # Gráfico 3: Adopción por Cargo (sin validación - siempre se muestra)
-                st.subheader("💼 % Adopción SAI por Cargo")
-                fig_adoption_cargo = create_adoption_by_cargo(filtered_data)
-                st.plotly_chart(fig_adoption_cargo, use_container_width=True)
-                st.markdown("---")
-                
-                # Gráfico 4: Distribución de Adopción por Área (VALIDACIÓN: solo si hay más de 1 área)
-                st.subheader("🎯 Distribución de Adopción SAI por Área")
-                if chart_conditions['show_adoption_by_area']:
-                    fig_adoption_distribution = create_adoption_distribution_by_area(filtered_data)
-                    st.plotly_chart(fig_adoption_distribution, use_container_width=True)
-                else:
-                    show_chart_requirement_message("adoption_by_area", "multiple_areas")
-                st.markdown("---")
-                
-                # Gráfico 5: Mapa de Calor de Adopción (VALIDACIÓN: solo si hay más de 1 país o más de 1 área)
-                st.subheader("🔥 Mapa de Calor: % Adopción SAI por País y Área")
-                if chart_conditions['show_adoption_heatmap']:
-                    fig_adoption_heatmap = create_adoption_heatmap(filtered_data)
-                    st.plotly_chart(fig_adoption_heatmap, use_container_width=True)
-                else:
-                    show_chart_requirement_message("adoption_heatmap", "multiple_dimensions")
-                st.markdown("---")
-                
-                # Tabla: Análisis Detallado de Adopción (siempre se muestra)
-                st.subheader("📋 Tabla de Análisis de Adopción por Mes")
-                adoption_table = create_adoption_analysis_table(filtered_data, month_columns_sorted, selected_months)
-                st.dataframe(adoption_table, use_container_width=True)
-                
-                # Botón de descarga para datos de adopción
-                csv_adoption = adoption_table.to_csv(index=False)
-                st.download_button(
-                    label="📥 Descargar datos de adopción",
-                    data=csv_adoption,
-                    file_name='analisis_adopcion_sai.csv',
-                    mime='text/csv'
-                )
+            fig_adoption_country = create_adoption_by_country(filtered_data)
+            st.plotly_chart(fig_adoption_country, use_container_width=True)
+        else:
+            show_chart_requirement_message("adoption_by_country", "multiple_countries")
+        st.markdown("---")
+        
+        # Gráfico 3: Mapa de Calor de Adopción por País y Área (VALIDACIÓN: solo si hay más de 1 país y área)
+        st.subheader("🔥 Mapa de Calor: % Adopción SAI por País y Área")
+        if chart_conditions['show_adoption_heatmap']:
+            # DESCRIPCIÓN COMPLETAMENTE OPTIMIZADA CON FILTROS DINÁMICOS
+            description = generate_chart_description('heatmap', selected_months, selected_countries, selected_areas)
+            st.markdown(f"*{description}*")
             
-            # ==========================================
-            # PESTAÑA 2: ANÁLISIS DE USO SAI CON VALIDACIONES
-            # ==========================================
-            with tab_uso:
-                st.header("📊 Análisis de Uso SAI")
-                
-                # Gráfico 1: Tendencia Temporal de Uso (VALIDACIÓN: solo si hay más de 1 mes)
-                st.subheader("📈 Tendencia de Uso de IA por Mes")
-                if chart_conditions['show_usage_trend']:
-                    fig_time_trend = create_time_trend(filtered_data, month_columns_sorted)
-                    st.plotly_chart(fig_time_trend, use_container_width=True)
-                else:
-                    show_chart_requirement_message("usage_trend", "multiple_months")
-                st.markdown("---")
-                
-                # Gráfico 2: Uso por País (VALIDACIÓN: solo si hay más de 1 país)
-                st.subheader("🌎 Uso de IA por País")
-                if chart_conditions['show_usage_by_country']:
-                    fig_country = create_country_analysis(filtered_data)
-                    st.plotly_chart(fig_country, use_container_width=True)
-                else:
-                    show_chart_requirement_message("usage_by_country", "multiple_countries")
-                st.markdown("---")
-                
-                # Gráfico 3: Uso por Área (VALIDACIÓN: solo si hay más de 1 área)
-                st.subheader("🏢 Distribución de Uso por Área")
-                if chart_conditions['show_usage_by_area']:
-                    fig_area = create_area_analysis(filtered_data)
-                    st.plotly_chart(fig_area, use_container_width=True)
-                else:
-                    show_chart_requirement_message("usage_by_area", "multiple_areas")
-                st.markdown("---")
-                
-                # Gráfico 4: Uso por Cargo (sin validación - siempre se muestra)
-                st.subheader("💼 Uso de IA por Cargo")
-                fig_cargo = create_cargo_analysis(filtered_data)
-                st.plotly_chart(fig_cargo, use_container_width=True)
-                st.markdown("---")
-                
-                # Gráfico 5: Mapa de Calor de Uso (VALIDACIÓN: solo si hay más de 1 país o más de 1 área)
-                st.subheader("🔥 Mapa de Calor: Uso por País y Área")
-                if chart_conditions['show_usage_heatmap']:
-                    fig_heatmap = create_heatmap(filtered_data)
-                    st.plotly_chart(fig_heatmap, use_container_width=True)
-                else:
-                    show_chart_requirement_message("usage_heatmap", "multiple_dimensions")
-                st.markdown("---")
-                
-                # Tabla: Top Usuarios (siempre se muestra)
-                st.subheader("🏆 Top 10 Usuarios por Uso de IA")
-                top_users = create_top_users(filtered_data)
-                st.dataframe(top_users, use_container_width=True)
-                
-                # Botón de descarga para top usuarios
-                csv_top_users = top_users.to_csv(index=False)
-                st.download_button(
-                    label="📥 Descargar top usuarios",
-                    data=csv_top_users,
-                    file_name='top_usuarios_sai.csv',
-                    mime='text/csv'
-                )
+            fig_adoption_heatmap = create_adoption_heatmap(filtered_data)
+            st.plotly_chart(fig_adoption_heatmap, use_container_width=True)
+        else:
+            show_chart_requirement_message("adoption_heatmap", "multiple_dimensions")
 
-            # ==========================================
-            # SECCIÓN ADICIONAL: ANÁLISIS DETALLADO (OPTIMIZADA CON NUEVA PESTAÑA DE RANKINGS)
-            # ==========================================
+        # ==========================================
+        # SECCIÓN FINAL: ANÁLISIS DETALLADO ADICIONAL (OPTIMIZADA)
+        # ==========================================
+        st.markdown("---")
+        st.header("📋 Análisis Detallado Adicional")
+
+        # PESTAÑAS OPTIMIZADAS: Rankings en primera posición
+        tab1, tab2, tab3 = st.tabs([
+            "🏆 Rankings",  # PRIMERA PESTAÑA
+            "📄 Datos Filtrados", 
+            "📈 Resumen Estadístico"
+        ])
+
+        # PRIMERA PESTAÑA: Rankings (OPTIMIZADA - 3 TABLAS)
+        with tab1:
+            show_rankings_section(filtered_data)
+
+        with tab2:
+            st.subheader("📄 Datos Filtrados Completos")
+            st.dataframe(filtered_data, use_container_width=True)
+
+            # Botón de descarga
+            csv = filtered_data.to_csv(index=False)
+            st.download_button(
+                label="📥 Descargar datos filtrados completos",
+                data=csv,
+                file_name='datos_filtrados_adopcion_completos.csv',
+                mime='text/csv'
+            )
+
+        with tab3:
+            st.subheader("📈 Resumen Estadístico por Dimensiones")
+
+            # Estadísticas por País (SOLO ADOPCIÓN)
+            st.write("**📍 Estadísticas de Adopción por País:**")
+            
+            country_adoption_stats = []
+            for country in filtered_data['PAIS'].unique():
+                country_data = filtered_data[filtered_data['PAIS'] == country]
+                total_users = country_data['NOMBRE'].nunique()
+                active_users = country_data[country_data['usos_ia'] > 0]['NOMBRE'].nunique()
+                adoption_rate = (active_users / total_users) * 100 if total_users > 0 else 0
+                
+                country_adoption_stats.append({
+                    'País': country,
+                    'Total Usuarios': total_users,
+                    'Usuarios Activos': active_users,
+                    '% Adopción': round(adoption_rate, 1)
+                })
+            
+            adoption_stats_df = pd.DataFrame(country_adoption_stats)
+            st.dataframe(adoption_stats_df, use_container_width=True)
+            
             st.markdown("---")
-            st.header("📋 Análisis Detallado Adicional")
-
-            # PESTAÑAS ACTUALIZADAS: Agregamos la nueva pestaña de Rankings
-            tab1, tab2, tab3, tab4 = st.tabs([
-                "📄 Datos Filtrados", 
-                "📈 Resumen Estadístico", 
-                "📊 Estadísticas Generales",
-                "🏆 Rankings"  # NUEVA PESTAÑA
-            ])
-
-            with tab1:
-                st.subheader("📄 Datos Filtrados Completos")
-                st.dataframe(filtered_data, use_container_width=True)
-
-                # Botón de descarga
-                csv = filtered_data.to_csv(index=False)
-                st.download_button(
-                    label="📥 Descargar datos filtrados completos",
-                    data=csv,
-                    file_name='datos_filtrados_ia_completos.csv',
-                    mime='text/csv'
-                )
-
-            with tab2:
-                st.subheader("📈 Resumen Estadístico por Dimensiones")
-
-                # Estadísticas por País
-                st.write("**📍 Estadísticas por País:**")
-                country_stats = filtered_data.groupby('PAIS').agg({
-                    'NOMBRE': 'nunique',
-                    'usos_ia': ['sum', 'mean', 'std']
-                }).round(2)
-                
-                country_stats.columns = [
-                    'Total de registros de personas',
-                    'Total de usos de SAI', 
-                    'Media de Uso SAI',
-                    'Desviación Estándar de Uso SAI'
-                ]
-                
-                country_stats['Desviación Estándar de Uso SAI'] = country_stats['Desviación Estándar de Uso SAI'].fillna(0)
-                st.dataframe(country_stats, use_container_width=True)
-                
-                st.markdown("---")
-                
-                # Estadísticas por Área
-                st.write("**🏢 Estadísticas por Área:**")
-                area_stats = filtered_data.groupby('AREA').agg({
-                    'NOMBRE': 'nunique',
-                    'usos_ia': ['sum', 'mean', 'std']
-                }).round(2)
-                
-                area_stats.columns = [
-                    'Total de registros de personas',
-                    'Total de usos de SAI', 
-                    'Media de Uso SAI',
-                    'Desviación Estándar de Uso SAI'
-                ]
-                
-                area_stats['Desviación Estándar de Uso SAI'] = area_stats['Desviación Estándar de Uso SAI'].fillna(0)
-                st.dataframe(area_stats, use_container_width=True)
-                
-                st.markdown("---")
-                
-                # Estadísticas por Cargo
-                st.write("**💼 Estadísticas por Cargo:**")
-                cargo_stats = filtered_data.groupby('CARGO').agg({
-                    'NOMBRE': 'nunique',
-                    'usos_ia': ['sum', 'mean', 'std']
-                }).round(2)
-                
-                cargo_stats.columns = [
-                    'Total de registros de personas',
-                    'Total de usos de SAI', 
-                    'Media de Uso SAI',
-                    'Desviación Estándar de Uso SAI'
-                ]
-                
-                cargo_stats['Desviación Estándar de Uso SAI'] = cargo_stats['Desviación Estándar de Uso SAI'].fillna(0)
-                st.dataframe(cargo_stats, use_container_width=True)
-
-            with tab3:
-                st.subheader("📊 Estadísticas Generales del Dataset")
-                
-                # Información general
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric("📊 Total de Registros", len(filtered_data))
-                    st.metric("👥 Usuarios Únicos", filtered_data['NOMBRE'].nunique())
-                
-                with col2:
-                    st.metric("🌍 Países Únicos", filtered_data['PAIS'].nunique())
-                    st.metric("🏢 Áreas Únicas", filtered_data['AREA'].nunique())
-                
-                with col3:
-                    st.metric("💼 Cargos Únicos", filtered_data['CARGO'].nunique())
-                    st.metric("📅 Meses Analizados", len(selected_months))
-
-            # ==========================================
-            # NUEVA PESTAÑA: RANKINGS
-            # ==========================================
-            with tab4:
-                show_rankings_section(filtered_data)
+            
+            # Información general
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("📊 Total de Registros", len(filtered_data))
+                st.metric("👥 Usuarios Únicos", filtered_data['NOMBRE'].nunique())
+            
+            with col2:
+                st.metric("🌍 Países Únicos", filtered_data['PAIS'].nunique())
+                st.metric("🏢 Áreas Únicas", filtered_data['AREA'].nunique())
+            
+            with col3:
+                st.metric("💼 Cargos Únicos", filtered_data['CARGO'].nunique())
+                st.metric("📅 Meses Analizados", len(selected_months))
 
     else:
-        # Mensaje de bienvenida
-        st.info("👆 Por favor, carga tu archivo Excel en la barra lateral para comenzar el análisis.")
-
-        # Mostrar ejemplo de estructura de datos
-        st.subheader("📋 Estructura de datos esperada:")
-        example_data = {
-            'NOMBRE': ['Juan Pérez', 'María García', 'Carlos López'],
-            'PAIS': ['México', 'España', 'Argentina'],
-            'CARGO': ['Analista', 'Gerente', 'Coordinador'],
-            'AREA': ['Marketing', 'IT', 'Ventas'],
-            'Sep-24': [45, 32, 28],
-            'Oct-24': [52, 38, 31],
-            'Nov-24': [48, 41, 35]
-        }
-        st.dataframe(pd.DataFrame(example_data))
+        # MENSAJE MODIFICADO: Error al cargar archivo automático
+        st.error("❌ **Error al cargar el archivo automáticamente**")
+        st.info("🔍 **Verifica que:**")
+        st.markdown("""
+        - El archivo `resultado_mes.xlsx` existe en el mismo directorio que este script
+        - El archivo tiene el formato correcto con las columnas: NOMBRE, PAIS, CARGO, AREA y meses
+        - Tienes permisos de lectura sobre el archivo
+        """)
+        
+        # Mostrar directorio actual para referencia
+        st.code(f"📂 Directorio actual: {os.getcwd()}")
 
 if __name__ == "__main__":
-
     main()
-
