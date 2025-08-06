@@ -3,6 +3,6 @@ pandas
 plotly
 numpy
 datetime
-re
 requests
 json
+
