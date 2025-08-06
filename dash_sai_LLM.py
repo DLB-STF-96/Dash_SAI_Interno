@@ -20,6 +20,114 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ==========================================
+# FUNCIÓN OPTIMIZADA: PROCESAMIENTO DE ARCHIVOS DE ENTRADA (SIN INTERFAZ)
+# ==========================================
+
+@st.cache_data
+def process_input_files():
+    """
+    Procesa automáticamente dos archivos de entrada y los convierte en el formato requerido
+    para el dashboard de adopción SAI.
+    
+    Busca automáticamente los archivos en el directorio actual:
+    - areas_personas.xlsx: Datos de usuarios (debe contener columnas: NOMBRE, PAIS, CARGO, AREA)
+    - uso_por_mes.xlsx: Datos de uso mensual (debe contener NOMBRE y columnas de meses)
+    
+    Returns:
+        tuple: (df_original, df_melted, month_columns_sorted) o (None, None, None) si hay error
+    """
+    try:
+        # Archivos fijos predefinidos
+        current_dir = os.getcwd()
+        file_areas_personas = os.path.join(current_dir, 'areas_personas.xlsx')
+        file_uso_por_mes = os.path.join(current_dir, 'uso_por_mes.xlsx')
+        
+        # Verificar que ambos archivos existan
+        if not os.path.exists(file_areas_personas):
+            st.error(f"❌ No se encontró el archivo: areas_personas.xlsx")
+            return None, None, None
+            
+        if not os.path.exists(file_uso_por_mes):
+            st.error(f"❌ No se encontró el archivo: uso_por_mes.xlsx")
+            return None, None, None
+        
+        # Cargar archivos automáticamente
+        df_users = pd.read_excel(file_areas_personas)
+        
+        # MODIFICACIÓN PRINCIPAL: Cargar archivo de uso y eliminar la segunda fila (índice 1)
+        df_usage = pd.read_excel(file_uso_por_mes)
+        if len(df_usage) > 1:
+            df_usage = df_usage.drop(df_usage.index[1]).reset_index(drop=True)
+        
+        # Validar columnas requeridas en archivo de usuarios
+        df_usage.rename(columns={'Custom Date': 'NOMBRE'}, inplace=True) 
+        required_user_columns = ['NOMBRE', 'PAIS', 'CARGO', 'AREA']
+        missing_user_cols = [col for col in required_user_columns if col not in df_users.columns]
+        
+        if missing_user_cols:
+            st.error(f"❌ Faltan columnas en areas_personas.xlsx: {missing_user_cols}")
+            st.info(f"📋 Columnas disponibles: {list(df_users.columns)}")
+            return None, None, None
+        
+        # Validar que archivo de uso tenga columna NOMBRE
+        if 'NOMBRE' not in df_usage.columns:
+            st.error(f"❌ Falta columna 'NOMBRE' en uso_por_mes.xlsx")
+            st.info(f"📋 Columnas disponibles: {list(df_usage.columns)}")
+            return None, None, None
+        
+        # Identificar columnas de meses en archivo de uso
+        month_columns = [col for col in df_usage.columns if col != 'NOMBRE']
+        
+        if not month_columns:
+            st.error(f"❌ No se encontraron columnas de meses en uso_por_mes.xlsx")
+            return None, None, None
+        
+        # Realizar merge de los archivos
+        df_merged = pd.merge(df_users, df_usage, on='NOMBRE', how='inner')
+        
+        if len(df_merged) == 0:
+            st.error("❌ No se encontraron coincidencias entre los archivos. Verifica que los nombres coincidan.")
+            return None, None, None
+        
+        # Limpiar valores nulos en las columnas básicas
+        df_merged['NOMBRE'] = df_merged['NOMBRE'].fillna('Sin Nombre')
+        df_merged['PAIS'] = df_merged['PAIS'].fillna('Sin País')
+        df_merged['CARGO'] = df_merged['CARGO'].fillna('Sin Cargo')
+        df_merged['AREA'] = df_merged['AREA'].fillna('Sin Área')
+
+        # FILTRAR: Excluir área de "Operaciones"
+        original_count = len(df_merged)
+        df_merged = df_merged[df_merged['AREA'].str.lower() != 'operaciones']
+        filtered_count = len(df_merged)
+
+        # Ordenar meses cronológicamente
+        month_columns_sorted = sort_months_chronologically(month_columns)
+
+        # Convertir datos a formato long para mejor análisis
+        basic_columns = ['NOMBRE', 'PAIS', 'CARGO', 'AREA']
+        df_melted = pd.melt(
+            df_merged,
+            id_vars=basic_columns,
+            value_vars=month_columns,
+            var_name='Mes',
+            value_name='usos_ia'
+        )
+
+        # Limpiar datos nulos en usos de IA
+        df_melted['usos_ia'] = pd.to_numeric(df_melted['usos_ia'], errors='coerce').fillna(0)
+        
+        return df_merged, df_melted, month_columns_sorted
+        
+    except Exception as e:
+        st.error(f"❌ Error al procesar los archivos: {str(e)}")
+        st.info("💡 Verifica que los archivos tengan el formato correcto y las columnas requeridas")
+        return None, None, None
+
+# ==========================================
+# FUNCIONES EXISTENTES (SIN CAMBIOS)
+# ==========================================
+
 # NUEVA FUNCIÓN: Llamada al LLM para generar resumen
 def generate_llm_summary(data_text, api_key):
     """
@@ -627,58 +735,6 @@ def create_multiple_filters(df_melted):
     st.sidebar.write(f"• **Áreas:** {len(selected_areas)} seleccionadas")
     
     return selected_countries, selected_areas
-
-# FUNCIÓN MODIFICADA: Cargar y procesar datos automáticamente
-@st.cache_data
-def load_data():
-    """
-    Carga y procesa automáticamente el archivo Excel 'resultado_mes.xlsx' desde el directorio actual
-    """
-    try:
-        # Construir la ruta del archivo en el directorio actual
-        file_path = os.path.join(os.getcwd(), "resultado_mes.xlsx")
-        
-        # Verificar si el archivo existe
-        if not os.path.exists(file_path):
-            st.error(f"❌ No se encontró el archivo 'resultado_mes.xlsx' en el directorio: {os.getcwd()}")
-            return None, None, None
-        
-        # Cargar el archivo Excel
-        df = pd.read_excel(file_path)
-
-        # Limpiar valores nulos en las columnas básicas
-        df['NOMBRE'] = df['NOMBRE'].fillna('Sin Nombre')
-        df['PAIS'] = df['PAIS'].fillna('Sin País')
-        df['CARGO'] = df['CARGO'].fillna('Sin Cargo')
-        df['AREA'] = df['AREA'].fillna('Sin Área')
-
-        # MODIFICADO: Filtrar para excluir área de "Operaciones"
-        df = df[df['AREA'].str.lower() != 'operaciones']
-
-        # Identificar columnas de meses (asumiendo que son las últimas columnas)
-        basic_columns = ['NOMBRE', 'PAIS', 'CARGO', 'AREA']
-        month_columns = [col for col in df.columns if col not in basic_columns]
-        
-        # Ordenar meses cronológicamente
-        month_columns_sorted = sort_months_chronologically(month_columns)
-
-        # Convertir datos a formato long para mejor análisis
-        df_melted = pd.melt(
-            df,
-            id_vars=basic_columns,
-            value_vars=month_columns,
-            var_name='Mes',
-            value_name='usos_ia'
-        )
-
-        # Limpiar datos nulos
-        df_melted['usos_ia'] = pd.to_numeric(df_melted['usos_ia'], errors='coerce').fillna(0)
-
-        return df, df_melted, month_columns_sorted
-        
-    except Exception as e:
-        st.error(f"❌ Error al cargar el archivo 'resultado_mes.xlsx': {str(e)}")
-        return None, None, None
 
 # FUNCIÓN OPTIMIZADA: Crear métricas principales en 2 filas con métricas de adopción
 def create_metrics(df_melted, filtered_data, selected_months):
@@ -1479,31 +1535,36 @@ def show_detailed_statistics_section(filtered_data):
                 help="Porcentaje promedio de adopción entre todas las áreas"
             )
 
-# FUNCIÓN PRINCIPAL MODIFICADA: Aplicación principal con carga automática
+# ==========================================
+# FUNCIÓN PRINCIPAL OPTIMIZADA
+# ==========================================
+
 def main():
     # Título principal
     st.title("🤖 Dashboard de Análisis de Adopción SAI - Áreas internas")
     st.markdown("---")
 
-    # CAMBIO PRINCIPAL: Cargar datos automáticamente
-    st.sidebar.header("📁 Estado del Archivo")
-    
-    # Mostrar información del archivo que se está cargando
-    st.sidebar.info("📄 **Archivo:** resultado_mes.xlsx\n\n📂 **Ubicación:** Directorio actual")
-    
-    # Cargar datos automáticamente
-    with st.spinner("🔄 Cargando archivo resultado_mes.xlsx..."):
-        df_original, df_melted, month_columns_sorted = load_data()
+    # PROCESAMIENTO AUTOMÁTICO DE ARCHIVOS (SIN INTERFAZ EN SIDEBAR)
+    with st.spinner("🔄 Procesando archivos automáticamente..."):
+        df_original, df_melted, month_columns_sorted = process_input_files()
 
     if df_melted is not None:
-        # Mostrar confirmación de carga exitosa
-        st.sidebar.success("✅ Archivo cargado exitosamente")
-        st.sidebar.write(f"📊 **Registros:** {len(df_melted)}")
-        st.sidebar.write(f"👥 **Usuarios únicos:** {df_melted['NOMBRE'].nunique()}")
-        st.sidebar.write(f"📅 **Meses disponibles:** {len(month_columns_sorted)}")
+        # Mostrar información básica de los datos procesados
+        st.success("✅ **Archivos procesados exitosamente**")
         
-        # Filtros en sidebar
-        st.sidebar.header("🔍 Filtros")
+        # Información compacta de los datos
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📊 Registros Totales", len(df_melted))
+        with col2:
+            st.metric("👥 Usuarios Únicos", df_melted['NOMBRE'].nunique())
+        with col3:
+            st.metric("📅 Meses Disponibles", len(month_columns_sorted))
+        
+        st.markdown("---")
+        
+        # FILTROS OPTIMIZADOS EN SIDEBAR (SIN SECCIÓN DE ARCHIVOS)
+        st.sidebar.header("🔍 Filtros de Análisis")
 
         # FILTROS DINÁMICOS OPTIMIZADOS: Crear filtros temporales dinámicos
         selected_months, filter_type = create_dynamic_filters(month_columns_sorted)
@@ -1631,13 +1692,15 @@ def main():
             show_detailed_statistics_section(filtered_data)
 
     else:
-        # MENSAJE MODIFICADO: Error al cargar archivo automático
-        st.error("❌ **Error al cargar el archivo automáticamente**")
+        # MENSAJE MODIFICADO: Error al procesar archivos
+        st.error("❌ **Error al procesar los archivos automáticamente**")
         st.info("🔍 **Verifica que:**")
         st.markdown("""
-        - El archivo `resultado_mes.xlsx` existe en el mismo directorio que este script
-        - El archivo tiene el formato correcto con las columnas: NOMBRE, PAIS, CARGO, AREA y meses
-        - Tienes permisos de lectura sobre el archivo
+        - Existan los archivos **areas_personas.xlsx** y **uso_por_mes.xlsx** en el directorio actual
+        - El archivo **areas_personas.xlsx** tenga las columnas: NOMBRE, PAIS, CARGO, AREA
+        - El archivo **uso_por_mes.xlsx** tenga la columna NOMBRE y columnas de meses
+        - Los nombres de usuarios coincidan entre ambos archivos
+        - Tengas permisos de lectura sobre los archivos
         """)
         
         # Mostrar directorio actual para referencia
