@@ -1202,6 +1202,283 @@ def show_no_filters_warning():
     </div>
     """, unsafe_allow_html=True)
 
+# ==========================================
+# FUNCIONES OPTIMIZADAS PARA ESTADÍSTICAS DETALLADAS
+# ==========================================
+
+def create_detailed_country_statistics(filtered_data):
+    """
+    Crea estadísticas detalladas por país con todas las métricas solicitadas
+    
+    Returns:
+        pd.DataFrame: DataFrame con estadísticas completas por país
+    """
+    country_stats = []
+    
+    for country in filtered_data['PAIS'].unique():
+        country_data = filtered_data[filtered_data['PAIS'] == country]
+        
+        # Métricas básicas
+        total_professionals = country_data['NOMBRE'].nunique()
+        active_users = country_data[country_data['usos_ia'] > 0]['NOMBRE'].nunique()
+        adoption_rate = (active_users / total_professionals) * 100 if total_professionals > 0 else 0
+        
+        # Métricas de uso
+        total_usage = country_data['usos_ia'].sum()
+        avg_usage_per_user = total_usage / total_professionals if total_professionals > 0 else 0
+        
+        # Calcular desviación estándar por usuario
+        user_usage_totals = country_data.groupby('NOMBRE')['usos_ia'].sum()
+        std_deviation = user_usage_totals.std() if len(user_usage_totals) > 1 else 0
+        
+        country_stats.append({
+            'País': country,
+            'Total Profesionales Elegibles': total_professionals,
+            'Usuarios Activos': active_users,
+            '% de Adopción': round(adoption_rate, 1),
+            'Cantidad de Usos': int(total_usage),
+            'Uso Promedio por Usuario': round(avg_usage_per_user, 2),
+            'Desviación Estándar': round(std_deviation, 2)
+        })
+    
+    # Convertir a DataFrame y ordenar por adopción
+    stats_df = pd.DataFrame(country_stats)
+    stats_df = stats_df.sort_values('% de Adopción', ascending=False)
+    
+    return stats_df
+
+def create_detailed_area_statistics(filtered_data):
+    """
+    Crea estadísticas detalladas por área con todas las métricas solicitadas
+    
+    Returns:
+        pd.DataFrame: DataFrame con estadísticas completas por área
+    """
+    area_stats = []
+    
+    for area in filtered_data['AREA'].unique():
+        area_data = filtered_data[filtered_data['AREA'] == area]
+        
+        # Métricas básicas
+        total_professionals = area_data['NOMBRE'].nunique()
+        active_users = area_data[area_data['usos_ia'] > 0]['NOMBRE'].nunique()
+        adoption_rate = (active_users / total_professionals) * 100 if total_professionals > 0 else 0
+        
+        # Métricas de uso
+        total_usage = area_data['usos_ia'].sum()
+        avg_usage_per_user = total_usage / total_professionals if total_professionals > 0 else 0
+        
+        # Calcular desviación estándar por usuario
+        user_usage_totals = area_data.groupby('NOMBRE')['usos_ia'].sum()
+        std_deviation = user_usage_totals.std() if len(user_usage_totals) > 1 else 0
+        
+        area_stats.append({
+            'Área': area,
+            'Total Profesionales Elegibles': total_professionals,
+            'Usuarios Activos': active_users,
+            '% de Adopción': round(adoption_rate, 1),
+            'Cantidad de Usos': int(total_usage),
+            'Uso Promedio por Usuario': round(avg_usage_per_user, 2),
+            'Desviación Estándar': round(std_deviation, 2)
+        })
+    
+    # Convertir a DataFrame y ordenar por adopción
+    stats_df = pd.DataFrame(area_stats)
+    stats_df = stats_df.sort_values('% de Adopción', ascending=False)
+    
+    return stats_df
+
+def show_detailed_statistics_section(filtered_data):
+    """
+    Muestra la sección de estadísticas detalladas con tablas optimizadas por país y área
+    """
+    st.subheader("📈 Resumen Estadístico por Dimensiones")
+    st.markdown("Análisis estadístico completo con métricas avanzadas de adopción y uso.")
+    
+    # Crear las estadísticas detalladas
+    country_stats = create_detailed_country_statistics(filtered_data)
+    area_stats = create_detailed_area_statistics(filtered_data)
+    
+    # TABLA 1: Estadísticas por País
+    st.markdown("#### 🌍 **Estadísticas Detalladas por País**")
+    st.markdown("*Análisis completo de adopción y uso de SAI por país con métricas estadísticas avanzadas.*")
+    
+    if len(country_stats) > 0:
+        # Mostrar tabla con formato mejorado
+        st.dataframe(
+            country_stats, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "País": st.column_config.TextColumn("🌍 País", width="medium"),
+                "Total Profesionales Elegibles": st.column_config.NumberColumn("👥 Total Profesionales", format="%d"),
+                "Usuarios Activos": st.column_config.NumberColumn("🚀 Usuarios Activos", format="%d"),
+                "% de Adopción": st.column_config.NumberColumn("🎯 % Adopción", format="%.1f%%"),
+                "Cantidad de Usos": st.column_config.NumberColumn("📊 Total Usos", format="%d"),
+                "Uso Promedio por Usuario": st.column_config.NumberColumn("📈 Promedio/Usuario", format="%.2f"),
+                "Desviación Estándar": st.column_config.NumberColumn("📉 Desv. Estándar", format="%.2f")
+            }
+        )
+        
+        # Botón de descarga para estadísticas por país
+        csv_country_stats = country_stats.to_csv(index=False)
+        st.download_button(
+            label="📥 Descargar Estadísticas por País",
+            data=csv_country_stats,
+            file_name=f'estadisticas_detalladas_pais_{datetime.now().strftime("%Y%m%d")}.csv',
+            mime='text/csv',
+            key="download_country_detailed_stats"
+        )
+        
+        # Insights destacados por país
+        with st.expander("💡 Insights Destacados - Países"):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                top_adoption_country = country_stats.iloc[0]
+                st.success(f"""
+                **🥇 Mayor Adopción:**
+                
+                **{top_adoption_country['País']}**
+                
+                📊 {top_adoption_country['% de Adopción']}% adopción
+                
+                👥 {top_adoption_country['Usuarios Activos']}/{top_adoption_country['Total Profesionales Elegibles']} usuarios
+                """)
+            
+            with col2:
+                top_usage_country = country_stats.loc[country_stats['Cantidad de Usos'].idxmax()]
+                st.info(f"""
+                **🚀 Mayor Uso Total:**
+                
+                **{top_usage_country['País']}**
+                
+                📈 {top_usage_country['Cantidad de Usos']} usos totales
+                
+                📊 {top_usage_country['Uso Promedio por Usuario']:.1f} promedio/usuario
+                """)
+            
+            with col3:
+                most_consistent_country = country_stats.loc[country_stats['Desviación Estándar'].idxmin()]
+                st.warning(f"""
+                **⚖️ Uso Más Consistente:**
+                
+                **{most_consistent_country['País']}**
+                
+                📉 {most_consistent_country['Desviación Estándar']:.2f} desv. estándar
+                
+                📈 {most_consistent_country['Uso Promedio por Usuario']:.1f} promedio/usuario
+                """)
+    else:
+        st.warning("⚠️ No hay datos suficientes para generar estadísticas por país")
+    
+    st.markdown("---")
+    
+    # TABLA 2: Estadísticas por Área
+    st.markdown("#### 🏢 **Estadísticas Detalladas por Área**")
+    st.markdown("*Análisis completo de adopción y uso de SAI por área funcional con métricas estadísticas avanzadas.*")
+    
+    if len(area_stats) > 0:
+        # Mostrar tabla con formato mejorado
+        st.dataframe(
+            area_stats, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Área": st.column_config.TextColumn("🏢 Área", width="medium"),
+                "Total Profesionales Elegibles": st.column_config.NumberColumn("👥 Total Profesionales", format="%d"),
+                "Usuarios Activos": st.column_config.NumberColumn("🚀 Usuarios Activos", format="%d"),
+                "% de Adopción": st.column_config.NumberColumn("🎯 % Adopción", format="%.1f%%"),
+                "Cantidad de Usos": st.column_config.NumberColumn("📊 Total Usos", format="%d"),
+                "Uso Promedio por Usuario": st.column_config.NumberColumn("📈 Promedio/Usuario", format="%.2f"),
+                "Desviación Estándar": st.column_config.NumberColumn("📉 Desv. Estándar", format="%.2f")
+            }
+        )
+        
+        # Botón de descarga para estadísticas por área
+        csv_area_stats = area_stats.to_csv(index=False)
+        st.download_button(
+            label="📥 Descargar Estadísticas por Área",
+            data=csv_area_stats,
+            file_name=f'estadisticas_detalladas_area_{datetime.now().strftime("%Y%m%d")}.csv',
+            mime='text/csv',
+            key="download_area_detailed_stats"
+        )
+        
+        # Insights destacados por área
+        with st.expander("💡 Insights Destacados - Áreas"):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                top_adoption_area = area_stats.iloc[0]
+                st.success(f"""
+                **🥇 Mayor Adopción:**
+                
+                **{top_adoption_area['Área']}**
+                
+                📊 {top_adoption_area['% de Adopción']}% adopción
+                
+                👥 {top_adoption_area['Usuarios Activos']}/{top_adoption_area['Total Profesionales Elegibles']} usuarios
+                """)
+            
+            with col2:
+                top_usage_area = area_stats.loc[area_stats['Cantidad de Usos'].idxmax()]
+                st.info(f"""
+                **🚀 Mayor Uso Total:**
+                
+                **{top_usage_area['Área']}**
+                
+                📈 {top_usage_area['Cantidad de Usos']} usos totales
+                
+                📊 {top_usage_area['Uso Promedio por Usuario']:.1f} promedio/usuario
+                """)
+            
+            with col3:
+                most_consistent_area = area_stats.loc[area_stats['Desviación Estándar'].idxmin()]
+                st.warning(f"""
+                **⚖️ Uso Más Consistente:**
+                
+                **{most_consistent_area['Área']}**
+                
+                📉 {most_consistent_area['Desviación Estándar']:.2f} desv. estándar
+                
+                📈 {most_consistent_area['Uso Promedio por Usuario']:.1f} promedio/usuario
+                """)
+    else:
+        st.warning("⚠️ No hay datos suficientes para generar estadísticas por área")
+    
+    # Resumen comparativo
+    st.markdown("---")
+    st.markdown("#### 📊 **Resumen Comparativo General**")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if len(country_stats) > 0:
+            st.metric(
+                "🌍 Países Analizados", 
+                len(country_stats),
+                help="Número total de países incluidos en el análisis"
+            )
+            st.metric(
+                "📈 Adopción Promedio (Países)", 
+                f"{country_stats['% de Adopción'].mean():.1f}%",
+                help="Porcentaje promedio de adopción entre todos los países"
+            )
+    
+    with col2:
+        if len(area_stats) > 0:
+            st.metric(
+                "🏢 Áreas Analizadas", 
+                len(area_stats),
+                help="Número total de áreas funcionales incluidas en el análisis"
+            )
+            st.metric(
+                "📈 Adopción Promedio (Áreas)", 
+                f"{area_stats['% de Adopción'].mean():.1f}%",
+                help="Porcentaje promedio de adopción entre todas las áreas"
+            )
+
 # FUNCIÓN PRINCIPAL MODIFICADA: Aplicación principal con carga automática
 def main():
     # Título principal
@@ -1329,7 +1606,7 @@ def main():
         tab1, tab2, tab3 = st.tabs([
             "🏆 Rankings",  # PRIMERA PESTAÑA
             "📄 Datos Filtrados", 
-            "📈 Resumen Estadístico"
+            "📈 Resumen Estadístico"  # PESTAÑA OPTIMIZADA
         ])
 
         # PRIMERA PESTAÑA: Rankings (OPTIMIZADA - 3 TABLAS)
@@ -1349,45 +1626,9 @@ def main():
                 mime='text/csv'
             )
 
+        # TERCERA PESTAÑA: Resumen Estadístico COMPLETAMENTE OPTIMIZADO
         with tab3:
-            st.subheader("📈 Resumen Estadístico por Dimensiones")
-
-            # Estadísticas por País (SOLO ADOPCIÓN)
-            st.write("**📍 Estadísticas de Adopción por País:**")
-            
-            country_adoption_stats = []
-            for country in filtered_data['PAIS'].unique():
-                country_data = filtered_data[filtered_data['PAIS'] == country]
-                total_users = country_data['NOMBRE'].nunique()
-                active_users = country_data[country_data['usos_ia'] > 0]['NOMBRE'].nunique()
-                adoption_rate = (active_users / total_users) * 100 if total_users > 0 else 0
-                
-                country_adoption_stats.append({
-                    'País': country,
-                    'Total Usuarios': total_users,
-                    'Usuarios Activos': active_users,
-                    '% Adopción': round(adoption_rate, 1)
-                })
-            
-            adoption_stats_df = pd.DataFrame(country_adoption_stats)
-            st.dataframe(adoption_stats_df, use_container_width=True)
-            
-            st.markdown("---")
-            
-            # Información general
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("📊 Total de Registros", len(filtered_data))
-                st.metric("👥 Usuarios Únicos", filtered_data['NOMBRE'].nunique())
-            
-            with col2:
-                st.metric("🌍 Países Únicos", filtered_data['PAIS'].nunique())
-                st.metric("🏢 Áreas Únicas", filtered_data['AREA'].nunique())
-            
-            with col3:
-                st.metric("💼 Cargos Únicos", filtered_data['CARGO'].nunique())
-                st.metric("📅 Meses Analizados", len(selected_months))
+            show_detailed_statistics_section(filtered_data)
 
     else:
         # MENSAJE MODIFICADO: Error al cargar archivo automático
