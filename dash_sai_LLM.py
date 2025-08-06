@@ -1,5 +1,5 @@
 #ADOPCION
-
+pip install -r requirements.txt
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -1913,4 +1913,5 @@ def main():
         st.dataframe(pd.DataFrame(example_data))
 
 if __name__ == "__main__":
+
     main()
