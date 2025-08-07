@@ -57,6 +57,7 @@ def process_input_files():
         
         # MODIFICACIÓN PRINCIPAL: Cargar archivo de uso y eliminar la segunda fila (índice 1)
         df_usage = pd.read_excel(file_uso_por_mes)
+        df_usage = df_usage.drop('Total', axis=1)
         if len(df_usage) > 1:
             df_usage = df_usage.drop(df_usage.index[1]).reset_index(drop=True)
         
@@ -128,10 +129,10 @@ def process_input_files():
 # FUNCIONES EXISTENTES (SIN CAMBIOS)
 # ==========================================
 
-# NUEVA FUNCIÓN: Llamada al LLM para generar resumen
+# FUNCIÓN: Llamada al LLM para generar resumen ejecutivo
 def generate_llm_summary(data_text, api_key):
     """
-    Genera un resumen usando el LLM a través de la API proporcionada
+    Genera un resumen ejecutivo usando el LLM a través de la API proporcionada
     
     Args:
         data_text: Texto plano con toda la información visible
@@ -159,7 +160,72 @@ def generate_llm_summary(data_text, api_key):
     except Exception as e:
         return f"Error al conectar con el LLM: {str(e)}"
 
-# NUEVA FUNCIÓN: Generar texto plano con toda la información visible
+# FUNCIÓN NUEVA: Llamada al LLM para responder preguntas específicas del usuario
+def generate_llm_question_response(data_text, pregunta, api_key):
+    """
+    Genera respuesta a pregunta específica del usuario usando el LLM a través de la API proporcionada
+    
+    Args:
+        data_text: Texto plano con toda la información visible (variable 'data')
+        pregunta: Pregunta específica del usuario (variable 'pregunta')
+        api_key: Clave de API para el servicio
+    
+    Returns:
+        str: Respuesta generada por el LLM o mensaje de error
+    """
+    try:
+        url = "https://sai-library.saiapplications.com"
+        headers = {"X-Api-Key": api_key}
+        data = {
+            "inputs": {
+                "data": data_text,
+                "pregunta": pregunta
+            }
+        }
+        
+        response = requests.post(f"{url}/api/templates/68942f6f8c7cd1b38cbd12e6/execute", json=data, headers=headers)
+        
+        if response.status_code == 200:
+            return response.text
+        else:
+            return f"Error en la API: Código de estado {response.status_code}"
+            
+    except Exception as e:
+        return f"Error al conectar con el LLM: {str(e)}"
+
+# FUNCIÓN: Llamada al LLM para generar insights del dashboard
+def generate_llm_insights(data_text, api_key):
+    """
+    Genera insights del dashboard usando el LLM a través de la API proporcionada
+    
+    Args:
+        data_text: Texto plano con toda la información visible
+        api_key: Clave de API para el servicio
+    
+    Returns:
+        str: Insights generados por el LLM o mensaje de error
+    """
+    try:
+        url = "https://sai-library.saiapplications.com"
+        headers = {"X-Api-Key": api_key}
+        data = {
+            "inputs": {
+                "data": data_text,
+            }
+        }
+        
+        # Usar un endpoint diferente para insights (asumiendo que existe)
+        response = requests.post(f"{url}/api/templates/6892acca9315b2d72e0e9ab4/execute", json=data, headers=headers)
+        
+        if response.status_code == 200:
+            return response.text
+        else:
+            return f"Error en la API: Código de estado {response.status_code}"
+            
+    except Exception as e:
+        return f"Error al conectar con el LLM: {str(e)}"
+
+# FUNCIÓN: Generar texto plano con toda la información visible
 def generate_summary_text(filtered_data, selected_months, selected_countries, selected_areas, filter_type):
     """
     Genera un texto plano con toda la información visible basada en los filtros seleccionados
@@ -264,119 +330,7 @@ def generate_summary_text(filtered_data, selected_months, selected_countries, se
     
     return summary_text
 
-# NUEVA FUNCIÓN: Mostrar sección de resumen con LLM
-def show_llm_summary_section(filtered_data, selected_months, selected_countries, selected_areas, filter_type):
-    """
-    Muestra la sección de resumen con LLM incluyendo configuración de API y botón de generación
-    """
-    st.header("🤖 Resumen Inteligente con IA")
-    st.markdown("Genera un resumen ejecutivo inteligente de todos los datos visibles usando inteligencia artificial.")
-    
-    # Configuración de API Key
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        api_key = st.text_input(
-            "🔑 API Key",
-            type="password",
-            placeholder="Ingresa tu API Key para el servicio de LLM",
-            help="Clave de API necesaria para acceder al servicio de generación de resúmenes"
-        )
-    
-    with col2:
-        st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
-        generate_summary = st.button(
-            "🚀 Generar Resumen",
-            type="primary",
-            disabled=not api_key,
-            help="Genera un resumen inteligente de todos los datos visibles"
-        )
-    
-    # Mostrar información sobre qué datos se incluirán
-    with st.expander("ℹ️ ¿Qué información se incluye en el resumen?"):
-        st.markdown("""
-        El resumen incluirá toda la información visible basada en los filtros seleccionados:
-        
-        **📊 Métricas Principales:**
-        - Total de profesionales elegibles
-        - Usuarios activos e inactivos
-        - Porcentajes de adopción (acumulado y promedio)
-        
-        **📈 Análisis Detallado:**
-        - Adopción por mes y país
-        - Estadísticas descriptivas
-        - Tendencias y patrones identificados
-        
-        **🎯 Filtros Aplicados:**
-        - Período temporal seleccionado
-        - Países incluidos
-        """)
-    
-    # Generar resumen si se presiona el botón
-    if generate_summary:
-        if not api_key:
-            st.error("⚠️ Por favor, ingresa tu API Key para continuar.")
-            return
-        
-        # Mostrar indicador de carga
-        with st.spinner("🤖 Generando resumen inteligente... Esto puede tomar unos momentos."):
-            # Generar texto con toda la información
-            summary_input_text = generate_summary_text(
-                filtered_data, 
-                selected_months, 
-                selected_countries, 
-                selected_areas, 
-                filter_type
-            )
-            
-            # Llamar al LLM
-            llm_response = generate_llm_summary(summary_input_text, api_key)
-        
-        # Mostrar resultado
-        st.subheader("📋 Resumen Ejecutivo Generado")
-        
-        # Verificar si hubo error
-        if llm_response.startswith("Error"):
-            st.error(f"❌ {llm_response}")
-            st.info("💡 Verifica que tu API Key sea correcta y que tengas conexión a internet.")
-        else:
-            # Mostrar resumen exitoso
-            st.success("✅ Resumen generado exitosamente")
-            
-            # Mostrar el resumen en un contenedor estilizado
-            st.markdown("""
-            <div style="
-                background-color: #f8f9fa;
-                border-left: 4px solid #007bff;
-                padding: 1rem;
-                border-radius: 0.5rem;
-                margin: 1rem 0;
-            ">
-            """, unsafe_allow_html=True)
-            
-            st.markdown(llm_response)
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            # Botón para descargar el resumen
-            st.download_button(
-                label="📥 Descargar Resumen",
-                data=llm_response,
-                file_name=f"resumen_sai_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                mime="text/plain",
-                help="Descarga el resumen generado como archivo de texto"
-            )
-        
-        # Mostrar datos de entrada (opcional, en expander)
-        with st.expander("🔍 Ver datos de entrada enviados al LLM"):
-            st.text_area(
-                "Información enviada al LLM:",
-                value=summary_input_text,
-                height=300,
-                disabled=True
-            )
-
-# NUEVA FUNCIÓN: Validar condiciones para mostrar gráficos
+# FUNCIÓN: Validar condiciones para mostrar gráficos
 def validate_chart_conditions(selected_months, selected_countries, selected_areas):
     """
     Valida las condiciones necesarias para mostrar cada tipo de gráfico
@@ -395,7 +349,7 @@ def validate_chart_conditions(selected_months, selected_countries, selected_area
         'show_adoption_heatmap': len(selected_countries) > 1 and len(selected_areas) > 1
     }
 
-# NUEVA FUNCIÓN: Mostrar mensaje informativo cuando no se cumplen condiciones
+# FUNCIÓN: Mostrar mensaje informativo cuando no se cumplen condiciones
 def show_chart_requirement_message(chart_type, requirement):
     """
     Muestra un mensaje informativo cuando no se cumplen las condiciones para mostrar un gráfico
@@ -412,7 +366,7 @@ def show_chart_requirement_message(chart_type, requirement):
     
     st.info(messages.get(requirement, "ℹ️ Condiciones insuficientes para mostrar este gráfico."))
 
-# FUNCIÓN OPTIMIZADA: Formatear listas para mostrar en descripciones - MODIFICADA PARA MOSTRAR TODOS LOS ELEMENTOS
+# FUNCIÓN: Formatear listas para mostrar en descripciones
 def format_list_for_description(items, max_items=None, item_type="elementos"):
     """
     Formatea una lista de elementos para mostrar en descripciones de manera legible
@@ -437,7 +391,7 @@ def format_list_for_description(items, max_items=None, item_type="elementos"):
         # CAMBIO PRINCIPAL: Mostrar TODOS los elementos sin límite
         return f"**{', '.join(items[:-1])}** y **{items[-1]}**"
 
-# FUNCIÓN OPTIMIZADA: Formatear período temporal para descripciones
+# FUNCIÓN: Formatear período temporal para descripciones
 def format_time_period_for_description(selected_months):
     """
     Formatea el período temporal para mostrar en descripciones de manera legible
@@ -460,7 +414,7 @@ def format_time_period_for_description(selected_months):
         sorted_months = sort_months_chronologically(selected_months)
         return f"**{len(selected_months)} meses** (desde **{sorted_months[0]}** hasta **{sorted_months[-1]}**)"
 
-# FUNCIÓN COMPLETAMENTE OPTIMIZADA: Generar descripción dinámica para gráficos - MODIFICADA PARA MOSTRAR TODOS LOS ELEMENTOS
+# FUNCIÓN: Generar descripción dinámica para gráficos
 def generate_chart_description(chart_type, selected_months, selected_countries, selected_areas):
     """
     Genera una descripción dinámica detallada para cada gráfico basada en los filtros seleccionados
@@ -581,7 +535,7 @@ def sort_months_chronologically(month_columns):
     # Devolver solo los nombres de meses ordenados
     return [item[0] for item in month_data]
 
-# FUNCIÓN OPTIMIZADA: Filtrar meses por período (EXCLUYE MES ACTUAL)
+# FUNCIÓN: Filtrar meses por período (EXCLUYE MES ACTUAL)
 def filter_months_by_period(month_columns_sorted, selected_period):
     """
     Filtra los meses según el período seleccionado, excluyendo el mes más reciente (mes en curso)
@@ -617,7 +571,7 @@ def filter_months_by_period(month_columns_sorted, selected_period):
     
     return month_columns_sorted
 
-# NUEVA FUNCIÓN: Crear filtros dinámicos según la selección del usuario
+# FUNCIÓN: Crear filtros dinámicos según la selección del usuario
 def create_dynamic_filters(month_columns_sorted):
     """
     Crea filtros dinámicos basados en la selección del usuario (Período o Meses específicos)
@@ -681,7 +635,7 @@ def create_dynamic_filters(month_columns_sorted):
     
     return selected_months, filter_type
 
-# NUEVA FUNCIÓN: Crear filtros múltiples con checkboxes (MODIFICADA - SIN FILTRO DE CARGO)
+# FUNCIÓN: Crear filtros múltiples con checkboxes (MODIFICADA - SIN FILTRO DE CARGO)
 def create_multiple_filters(df_melted):
     """
     Crea filtros múltiples con checkboxes para países y áreas (sin filtro de cargo)
@@ -736,7 +690,7 @@ def create_multiple_filters(df_melted):
     
     return selected_countries, selected_areas
 
-# FUNCIÓN OPTIMIZADA: Crear métricas principales en 2 filas con métricas de adopción
+# FUNCIÓN: Crear métricas principales en 2 filas con métricas de adopción
 def create_metrics(df_melted, filtered_data, selected_months):
     """
     Calcula y muestra métricas principales del dashboard organizadas en 2 filas de 2 columnas cada una
@@ -792,7 +746,7 @@ def create_metrics(df_melted, filtered_data, selected_months):
             
         st.metric("📊 % Promedio Adopción SAI", f"{average_adoption_rate:.1f}%")
 
-# FUNCIÓN MODIFICADA: Gráfico de adopción SAI vs País con ejes fijos de 0 a 100%
+# FUNCIÓN: Gráfico de adopción SAI vs País con ejes fijos de 0 a 100%
 def create_adoption_by_country(filtered_data):
     """
     Crea gráfico de % de adopción de SAI por país con ejes fijos de 0 a 100%
@@ -845,7 +799,7 @@ def create_adoption_by_country(filtered_data):
     
     return fig
 
-# FUNCIÓN MODIFICADA: Mapa de calor de adopción SAI por País y Área - OPTIMIZADA CON COLORES ROJO-VERDE
+# FUNCIÓN: Mapa de calor de adopción SAI por País y Área - OPTIMIZADA CON COLORES ROJO-VERDE
 def create_adoption_heatmap(filtered_data):
     """
     Crea mapa de calor de % de adopción de SAI por País y Área
@@ -919,7 +873,7 @@ def create_adoption_heatmap(filtered_data):
     
     return fig
 
-# FUNCIÓN OPTIMIZADA: Gráfico de % Adopción vs Tiempo
+# FUNCIÓN: Gráfico de % Adopción vs Tiempo
 def create_adoption_trend(filtered_data, selected_months):
     """
     Crea gráfico de tendencia de % de adopción a lo largo del tiempo
@@ -1210,7 +1164,7 @@ def show_rankings_section(filtered_data):
         else:
             st.warning("Sin datos de adopción")
 
-# FUNCIÓN OPTIMIZADA: Mostrar mensaje de advertencia cuando no hay meses seleccionados
+# FUNCIÓN: Mostrar mensaje de advertencia cuando no hay meses seleccionados
 def show_no_months_warning():
     """
     Muestra un mensaje de advertencia cuando no hay meses seleccionados
@@ -1234,7 +1188,7 @@ def show_no_months_warning():
     </div>
     """, unsafe_allow_html=True)
 
-# NUEVA FUNCIÓN: Mostrar mensaje de advertencia cuando no hay filtros seleccionados
+# FUNCIÓN: Mostrar mensaje de advertencia cuando no hay filtros seleccionados
 def show_no_filters_warning():
     """
     Muestra un mensaje de advertencia cuando no hay países o áreas seleccionados
@@ -1536,7 +1490,361 @@ def show_detailed_statistics_section(filtered_data):
             )
 
 # ==========================================
-# FUNCIÓN PRINCIPAL OPTIMIZADA
+# FUNCIONES PARA LAS NUEVAS PESTAÑAS
+# ==========================================
+
+def show_dashboard_tab(filtered_data, selected_months, selected_countries, selected_areas, chart_conditions):
+    """
+    Muestra el contenido de la pestaña Dashboard
+    """
+    # SECCIÓN: Métricas principales
+    st.header("📊 Métricas Principales")
+    create_metrics(None, filtered_data, selected_months)
+    st.markdown("---")
+
+    # SECCIÓN: Análisis de Adopción SAI
+    st.header("🎯 Análisis de Adopción SAI")
+    
+    # Gráfico 1: Evolución de Adopción
+    st.subheader("📈 Evolución del % de Adopción por Mes")
+    if chart_conditions['show_adoption_trend']:
+        description = generate_chart_description('trend', selected_months, selected_countries, selected_areas)
+        st.markdown(f"*{description}*")
+        
+        fig_adoption_trend = create_adoption_trend(filtered_data, selected_months)
+        st.plotly_chart(fig_adoption_trend, use_container_width=True)
+    else:
+        show_chart_requirement_message("adoption_trend", "multiple_months")
+    st.markdown("---")
+    
+    # Gráfico 2: Adopción por País
+    st.subheader("🌎 % Adopción SAI por País")
+    if chart_conditions['show_adoption_by_country']:
+        description = generate_chart_description('country', selected_months, selected_countries, selected_areas)
+        st.markdown(f"*{description}*")
+        
+        fig_adoption_country = create_adoption_by_country(filtered_data)
+        st.plotly_chart(fig_adoption_country, use_container_width=True)
+    else:
+        show_chart_requirement_message("adoption_by_country", "multiple_countries")
+    st.markdown("---")
+    
+    # Gráfico 3: Mapa de Calor
+    st.subheader("🔥 Mapa de Calor: % Adopción SAI por País y Área")
+    if chart_conditions['show_adoption_heatmap']:
+        description = generate_chart_description('heatmap', selected_months, selected_countries, selected_areas)
+        st.markdown(f"*{description}*")
+        
+        fig_adoption_heatmap = create_adoption_heatmap(filtered_data)
+        st.plotly_chart(fig_adoption_heatmap, use_container_width=True)
+    else:
+        show_chart_requirement_message("adoption_heatmap", "multiple_dimensions")
+
+    # SECCIÓN: Análisis Detallado Adicional
+    st.markdown("---")
+    st.header("📋 Análisis Detallado Adicional")
+
+    # Sub-pestañas dentro del dashboard
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs([
+        "🏆 Rankings",
+        "📄 Datos Filtrados", 
+        "📈 Resumen Estadístico"
+    ])
+
+    with sub_tab1:
+        show_rankings_section(filtered_data)
+
+    with sub_tab2:
+        st.subheader("📄 Datos Filtrados Completos")
+        st.dataframe(filtered_data, use_container_width=True)
+
+        # Botón de descarga
+        csv = filtered_data.to_csv(index=False)
+        st.download_button(
+            label="📥 Descargar datos filtrados completos",
+            data=csv,
+            file_name='datos_filtrados_adopcion_completos.csv',
+            mime='text/csv'
+        )
+
+    with sub_tab3:
+        show_detailed_statistics_section(filtered_data)
+
+def show_executive_summary_tab(filtered_data, selected_months, selected_countries, selected_areas, filter_type):
+    """
+    Muestra el contenido de la pestaña Resumen Ejecutivo usando IA
+    """
+    st.header("🤖 Resumen Ejecutivo con IA")
+    st.markdown("Genera un resumen ejecutivo inteligente de todos los datos visibles usando inteligencia artificial.")
+    
+    # OPTIMIZACIÓN PRINCIPAL: Usar session_state para mantener la API Key
+    if 'executive_api_key' not in st.session_state:
+        st.session_state.executive_api_key = ""
+    
+    # Configuración de API Key
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        api_key = st.text_input(
+            "🔑 API Key",
+            type="password",
+            placeholder="Ingresa tu API Key para el servicio de LLM",
+            help="Clave de API necesaria para acceder al servicio de generación de resúmenes",
+            value=st.session_state.executive_api_key,
+            key="executive_api_key_input"
+        )
+        # Actualizar session_state cuando cambie el input
+        st.session_state.executive_api_key = api_key
+    
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
+        generate_summary = st.button(
+            "🚀 Generar Resumen Ejecutivo",
+            type="primary",
+            disabled=not api_key,
+            help="Genera un resumen ejecutivo inteligente de todos los datos visibles"
+        )
+    
+    # Mostrar información sobre qué datos se incluirán
+    with st.expander("ℹ️ ¿Qué información se incluye en el resumen ejecutivo?"):
+        st.markdown("""
+        El resumen ejecutivo incluirá toda la información visible basada en los filtros seleccionados:
+        
+        **📊 Métricas Principales:**
+        - Total de profesionales elegibles
+        - Usuarios activos e inactivos
+        - Porcentajes de adopción (acumulado y promedio)
+        
+        **📈 Análisis Detallado:**
+        - Adopción por mes y país
+        - Estadísticas descriptivas
+        - Tendencias y patrones identificados
+        
+        **🎯 Filtros Aplicados:**
+        - Período temporal seleccionado
+        - Países y áreas incluidos
+        """)
+    
+    # Generar resumen si se presiona el botón
+    if generate_summary:
+        if not api_key:
+            st.error("⚠️ Por favor, ingresa tu API Key para continuar.")
+            return
+        
+        # Mostrar indicador de carga
+        with st.spinner("🤖 Generando resumen ejecutivo... Esto puede tomar unos momentos."):
+            # Generar texto con toda la información
+            summary_input_text = generate_summary_text(
+                filtered_data, 
+                selected_months, 
+                selected_countries, 
+                selected_areas, 
+                filter_type
+            )
+            
+            # Llamar al LLM
+            llm_response = generate_llm_summary(summary_input_text, api_key)
+        
+        # Mostrar resultado
+        st.subheader("📋 Resumen Ejecutivo Generado")
+        
+        # Verificar si hubo error
+        if llm_response.startswith("Error"):
+            st.error(f"❌ {llm_response}")
+            st.info("💡 Verifica que tu API Key sea correcta y que tengas conexión a internet.")
+        else:
+            # Mostrar resumen exitoso
+            st.success("✅ Resumen ejecutivo generado exitosamente")
+            
+            # Mostrar el resumen en un contenedor estilizado
+            st.markdown("""
+            <div style="
+                background-color: #f8f9fa;
+                border-left: 4px solid #007bff;
+                padding: 1rem;
+                border-radius: 0.5rem;
+                margin: 1rem 0;
+            ">
+            """, unsafe_allow_html=True)
+            
+            st.markdown(llm_response)
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Botón para descargar el resumen
+            st.download_button(
+                label="📥 Descargar Resumen Ejecutivo",
+                data=llm_response,
+                file_name=f"resumen_ejecutivo_sai_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain",
+                help="Descarga el resumen ejecutivo generado como archivo de texto"
+            )
+        
+        # Mostrar datos de entrada (opcional, en expander)
+        with st.expander("🔍 Ver datos de entrada enviados al LLM"):
+            st.text_area(
+                "Información enviada al LLM:",
+                value=summary_input_text,
+                height=300,
+                disabled=True
+            )
+
+def show_insights_tab(filtered_data, selected_months, selected_countries, selected_areas, filter_type):
+    """
+    PESTAÑA OPTIMIZADA: Insights Dashboard con IA - Responde preguntas específicas del usuario
+    """
+    st.header("💡 Insights Dashboard con IA")
+    st.markdown("Haz preguntas específicas sobre los datos del dashboard y obtén respuestas inteligentes usando IA.")
+    
+    # OPTIMIZACIÓN PRINCIPAL: Usar session_state para mantener la API Key y pregunta
+    if 'insights_api_key' not in st.session_state:
+        st.session_state.insights_api_key = ""
+    if 'insights_pregunta' not in st.session_state:
+        st.session_state.insights_pregunta = ""
+    
+    # Configuración de API Key y pregunta del usuario
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        api_key = st.text_input(
+            "🔑 API Key",
+            type="password",
+            placeholder="Ingresa tu API Key para el servicio de LLM",
+            help="Clave de API necesaria para acceder al servicio de generación de insights",
+            value=st.session_state.insights_api_key,
+            key="insights_api_key_input"
+        )
+        # Actualizar session_state cuando cambie el input
+        st.session_state.insights_api_key = api_key
+    
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
+        generate_insights = st.button(
+            "🚀 Obtener Respuesta",
+            type="primary",
+            disabled=not api_key,
+            help="Genera respuesta inteligente a tu pregunta específica"
+        )
+    
+    # Campo de pregunta del usuario con ejemplos en placeholder
+    pregunta = st.text_area(
+        "❓ **Escribe tu pregunta sobre los datos:**",
+        placeholder="¿Cuánto creció la adopción SAI en Colombia los últimos meses?",
+        height=100,
+        help="Escribe cualquier pregunta específica sobre los datos del dashboard",
+        value=st.session_state.insights_pregunta,
+        key="insights_pregunta_input"
+    )
+    # Actualizar session_state cuando cambie el input
+    st.session_state.insights_pregunta = pregunta
+    
+    # Mostrar ejemplos de preguntas sugeridas
+    with st.expander("💡 Ejemplos de preguntas que puedes hacer"):
+        st.markdown("""
+        **📈 Preguntas sobre Tendencias:**
+        - ¿Cuánto creció la adopción SAI en Colombia los últimos meses?
+        - ¿Cuál es la tendencia de adopción en el período seleccionado?
+        - ¿Qué meses tuvieron mejor performance?
+        
+        **🌍 Preguntas sobre Países:**
+        - ¿Qué país tiene mejor performance en adopción?
+        - ¿Cuáles son las diferencias entre países?
+        - ¿Qué países necesitan más apoyo?
+        
+        **🏢 Preguntas sobre Áreas:**
+        - ¿Cuáles son las tendencias por área funcional?
+        - ¿Qué área tiene mayor potencial de crecimiento?
+        - ¿Cómo se comparan las diferentes áreas?
+        
+        **🔍 Preguntas Analíticas:**
+        - ¿Qué factores influyen en la adopción de SAI?
+        - ¿Cuáles son los principales insights de los datos?
+        - ¿Qué recomendaciones darías para mejorar la adopción?
+        """)
+    
+    # Generar respuesta si se presiona el botón
+    if generate_insights:
+        if not api_key:
+            st.error("⚠️ Por favor, ingresa tu API Key para continuar.")
+            return
+        
+        if not pregunta.strip():
+            st.error("⚠️ Por favor, escribe una pregunta para obtener una respuesta.")
+            return
+        
+        # Mostrar indicador de carga
+        with st.spinner("💡 Analizando datos y generando respuesta... Esto puede tomar unos momentos."):
+            # Generar texto con toda la información (variable 'data')
+            data = generate_summary_text(
+                filtered_data, 
+                selected_months, 
+                selected_countries, 
+                selected_areas, 
+                filter_type
+            )
+            
+            # Llamar al LLM con la pregunta específica
+            llm_response = generate_llm_question_response(data, pregunta, api_key)
+        
+        # Mostrar resultado
+        st.subheader("💡 Respuesta Generada")
+        
+        # Mostrar la pregunta del usuario
+        st.markdown(f"**❓ Tu pregunta:** *{pregunta}*")
+        st.markdown("---")
+        
+        # Verificar si hubo error
+        if llm_response.startswith("Error"):
+            st.error(f"❌ {llm_response}")
+            st.info("💡 Verifica que tu API Key sea correcta y que tengas conexión a internet.")
+        else:
+            # Mostrar respuesta exitosa
+            st.success("✅ Respuesta generada exitosamente")
+            
+            # Mostrar la respuesta en un contenedor estilizado
+            st.markdown("""
+            <div style="
+                background-color: #f0f8ff;
+                border-left: 4px solid #4CAF50;
+                padding: 1rem;
+                border-radius: 0.5rem;
+                margin: 1rem 0;
+            ">
+            """, unsafe_allow_html=True)
+            
+            st.markdown(llm_response)
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Botón para descargar la respuesta
+            download_content = f"PREGUNTA:\n{pregunta}\n\n" + "="*50 + f"\n\nRESPUESTA:\n{llm_response}"
+            st.download_button(
+                label="📥 Descargar Pregunta y Respuesta",
+                data=download_content,
+                file_name=f"pregunta_respuesta_sai_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain",
+                help="Descarga la pregunta y respuesta generada como archivo de texto"
+            )
+        
+        # Mostrar datos de entrada (opcional, en expander)
+        with st.expander("🔍 Ver datos enviados al LLM"):
+            st.text_area(
+                "Datos enviados al LLM (variable 'data'):",
+                value=data,
+                height=200,
+                disabled=True,
+                key="insights_data_text"
+            )
+            
+            st.text_input(
+                "Pregunta enviada al LLM (variable 'pregunta'):",
+                value=pregunta,
+                disabled=True,
+                key="insights_pregunta_text"
+            )
+
+# ==========================================
+# FUNCIÓN PRINCIPAL OPTIMIZADA CON 3 PESTAÑAS
 # ==========================================
 
 def main():
@@ -1544,7 +1852,7 @@ def main():
     st.title("🤖 Dashboard de Análisis de Adopción SAI - Áreas internas")
     st.markdown("---")
 
-    # PROCESAMIENTO AUTOMÁTICO DE ARCHIVOS (SIN INTERFAZ EN SIDEBAR)
+    # PROCESAMIENTO AUTOMÁTICO DE ARCHIVOS
     with st.spinner("🔄 Procesando archivos automáticamente..."):
         df_original, df_melted, month_columns_sorted = process_input_files()
 
@@ -1563,136 +1871,63 @@ def main():
         
         st.markdown("---")
         
-        # FILTROS OPTIMIZADOS EN SIDEBAR (SIN SECCIÓN DE ARCHIVOS)
+        # FILTROS EN SIDEBAR
         st.sidebar.header("🔍 Filtros de Análisis")
 
-        # FILTROS DINÁMICOS OPTIMIZADOS: Crear filtros temporales dinámicos
+        # Filtros temporales dinámicos
         selected_months, filter_type = create_dynamic_filters(month_columns_sorted)
 
         # Separador visual
         st.sidebar.markdown("---")
 
-        # FILTROS MÚLTIPLES MODIFICADOS: Sin filtro de cargo
+        # Filtros múltiples
         selected_countries, selected_areas = create_multiple_filters(df_melted)
 
-        # VALIDACIÓN PRINCIPAL: Verificar si hay meses seleccionados
+        # VALIDACIONES
         if not selected_months:
             show_no_months_warning()
             return
 
-        # NUEVA VALIDACIÓN: Verificar si hay países y áreas seleccionados
         if not selected_countries or not selected_areas:
             show_no_filters_warning()
             return
 
-        # NUEVA FUNCIONALIDAD: Validar condiciones para mostrar gráficos
+        # Validar condiciones para mostrar gráficos
         chart_conditions = validate_chart_conditions(selected_months, selected_countries, selected_areas)
 
         # Aplicar filtros
         filtered_data = df_melted.copy()
-
-        # Filtrar por países seleccionados
         filtered_data = filtered_data[filtered_data['PAIS'].isin(selected_countries)]
-
-        # Filtrar por áreas seleccionadas
         filtered_data = filtered_data[filtered_data['AREA'].isin(selected_areas)]
-
-        # Filtrar por meses seleccionados
         filtered_data = filtered_data[filtered_data['Mes'].isin(selected_months)]
 
-        # Mostrar información del filtro aplicado (SIN CARGO)
+        # Mostrar información del filtro aplicado
         st.info(f"📊 **Filtro temporal:** {filter_type} | **Meses:** {len(selected_months)} | **Países:** {len(selected_countries)} | **Áreas:** {len(selected_areas)}")
 
-        # SECCIÓN OPTIMIZADA: Mostrar métricas principales en 2 filas (ACTUALIZADA)
-        st.header("📊 Métricas Principales")
-        create_metrics(df_melted, filtered_data, selected_months)
-        st.markdown("---")
-
         # ==========================================
-        # SECCIÓN: RESUMEN INTELIGENTE CON LLM (SIN CARGO)
+        # PESTAÑAS PRINCIPALES - OPTIMIZACIÓN PRINCIPAL
         # ==========================================
-        show_llm_summary_section(filtered_data, selected_months, selected_countries, selected_areas, filter_type)
-        st.markdown("---")
-
-        # ==========================================
-        # SECCIÓN PRINCIPAL: ANÁLISIS DE ADOPCIÓN SAI CON DESCRIPCIONES DINÁMICAS OPTIMIZADAS
-        # ==========================================
-        st.header("🎯 Análisis de Adopción SAI")
         
-        # Gráfico 1: Evolución de Adopción (VALIDACIÓN: solo si hay más de 1 mes)
-        st.subheader("📈 Evolución del % de Adopción por Mes")
-        if chart_conditions['show_adoption_trend']:
-            # DESCRIPCIÓN COMPLETAMENTE OPTIMIZADA CON FILTROS DINÁMICOS
-            description = generate_chart_description('trend', selected_months, selected_countries, selected_areas)
-            st.markdown(f"*{description}*")
-            
-            fig_adoption_trend = create_adoption_trend(filtered_data, selected_months)
-            st.plotly_chart(fig_adoption_trend, use_container_width=True)
-        else:
-            show_chart_requirement_message("adoption_trend", "multiple_months")
-        st.markdown("---")
-        
-        # Gráfico 2: Adopción por País (VALIDACIÓN: solo si hay más de 1 país)
-        st.subheader("🌎 % Adopción SAI por País")
-        if chart_conditions['show_adoption_by_country']:
-            # DESCRIPCIÓN COMPLETAMENTE OPTIMIZADA CON FILTROS DINÁMICOS
-            description = generate_chart_description('country', selected_months, selected_countries, selected_areas)
-            st.markdown(f"*{description}*")
-            
-            fig_adoption_country = create_adoption_by_country(filtered_data)
-            st.plotly_chart(fig_adoption_country, use_container_width=True)
-        else:
-            show_chart_requirement_message("adoption_by_country", "multiple_countries")
-        st.markdown("---")
-        
-        # Gráfico 3: Mapa de Calor de Adopción por País y Área (VALIDACIÓN: solo si hay más de 1 país y área)
-        st.subheader("🔥 Mapa de Calor: % Adopción SAI por País y Área")
-        if chart_conditions['show_adoption_heatmap']:
-            # DESCRIPCIÓN COMPLETAMENTE OPTIMIZADA CON FILTROS DINÁMICOS
-            description = generate_chart_description('heatmap', selected_months, selected_countries, selected_areas)
-            st.markdown(f"*{description}*")
-            
-            fig_adoption_heatmap = create_adoption_heatmap(filtered_data)
-            st.plotly_chart(fig_adoption_heatmap, use_container_width=True)
-        else:
-            show_chart_requirement_message("adoption_heatmap", "multiple_dimensions")
-
-        # ==========================================
-        # SECCIÓN FINAL: ANÁLISIS DETALLADO ADICIONAL (OPTIMIZADA)
-        # ==========================================
-        st.markdown("---")
-        st.header("📋 Análisis Detallado Adicional")
-
-        # PESTAÑAS OPTIMIZADAS: Rankings en primera posición
         tab1, tab2, tab3 = st.tabs([
-            "🏆 Rankings",  # PRIMERA PESTAÑA
-            "📄 Datos Filtrados", 
-            "📈 Resumen Estadístico"  # PESTAÑA OPTIMIZADA
+            "📊 Dashboard",
+            "📋 Resumen Ejecutivo IA", 
+            "💡 Insights Dashboard IA"
         ])
 
-        # PRIMERA PESTAÑA: Rankings (OPTIMIZADA - 3 TABLAS)
+        # PESTAÑA 1: Dashboard completo
         with tab1:
-            show_rankings_section(filtered_data)
+            show_dashboard_tab(filtered_data, selected_months, selected_countries, selected_areas, chart_conditions)
 
+        # PESTAÑA 2: Resumen Ejecutivo con IA
         with tab2:
-            st.subheader("📄 Datos Filtrados Completos")
-            st.dataframe(filtered_data, use_container_width=True)
+            show_executive_summary_tab(filtered_data, selected_months, selected_countries, selected_areas, filter_type)
 
-            # Botón de descarga
-            csv = filtered_data.to_csv(index=False)
-            st.download_button(
-                label="📥 Descargar datos filtrados completos",
-                data=csv,
-                file_name='datos_filtrados_adopcion_completos.csv',
-                mime='text/csv'
-            )
-
-        # TERCERA PESTAÑA: Resumen Estadístico COMPLETAMENTE OPTIMIZADO
+        # PESTAÑA 3: Insights Dashboard con IA - OPTIMIZADA
         with tab3:
-            show_detailed_statistics_section(filtered_data)
+            show_insights_tab(filtered_data, selected_months, selected_countries, selected_areas, filter_type)
 
     else:
-        # MENSAJE MODIFICADO: Error al procesar archivos
+        # Error al procesar archivos
         st.error("❌ **Error al procesar los archivos automáticamente**")
         st.info("🔍 **Verifica que:**")
         st.markdown("""
