@@ -133,14 +133,10 @@ def process_input_files():
         df_merged['AREA'] = df_merged['AREA'].fillna('Sin Área')
 
         # FILTRAR: Excluir área de "Operaciones"
-        original_count = len(df_merged)
         df_merged = df_merged[df_merged['AREA'].str.lower() != 'operaciones']
-        filtered_count = len(df_merged)
         
         # Informar sobre el resultado del merge y filtrado
         st.success(f"✅ Se procesaron correctamente {len(df_merged)} registros")
-        if original_count > filtered_count:
-            st.info(f"ℹ️ Se filtraron {original_count - filtered_count} registros del área de Operaciones")
 
         # Ordenar meses cronológicamente
         month_columns_sorted = sort_months_chronologically(month_columns)
