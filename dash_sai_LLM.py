@@ -55,7 +55,7 @@ def process_input_files():
         # Cargar archivos automáticamente
         df_users = pd.read_excel(file_areas_personas)
         
-        # MODIFICACIÓN PRINCIPAL: Cargar archivo de uso y eliminar la segunda fila (índice 1)
+        # Cargar archivo de uso y eliminar la segunda fila (índice 1)
         df_usage = pd.read_excel(file_uso_por_mes)
         df_usage = df_usage.drop('Total', axis=1)
         if len(df_usage) > 1:
@@ -77,19 +77,54 @@ def process_input_files():
             st.info(f"📋 Columnas disponibles: {list(df_usage.columns)}")
             return None, None, None
         
+        # OPTIMIZACIÓN: Normalizar nombres eliminando espacios extras y convirtiendo a mayúsculas
+        # Guardar nombres originales para mantenerlos en el resultado final
+        df_users['NOMBRE_ORIGINAL'] = df_users['NOMBRE']
+        df_usage['NOMBRE_ORIGINAL'] = df_usage['NOMBRE']
+        
+        # Función para normalizar nombres: elimina espacios múltiples y espacios al inicio/final
+        def normalize_name(name):
+            """Normaliza un nombre eliminando espacios extras y convirtiendo a mayúsculas"""
+            if pd.isna(name):
+                return ''
+            # Convertir a string, eliminar espacios al inicio/final y reemplazar múltiples espacios por uno solo
+            return ' '.join(str(name).strip().split()).upper()
+        
+        # Aplicar normalización a ambos dataframes
+        df_users['NOMBRE_NORMALIZADO'] = df_users['NOMBRE'].apply(normalize_name)
+        df_usage['NOMBRE_NORMALIZADO'] = df_usage['NOMBRE'].apply(normalize_name)
+        
         # Identificar columnas de meses en archivo de uso
-        month_columns = [col for col in df_usage.columns if col != 'NOMBRE']
+        month_columns = [col for col in df_usage.columns if col not in ['NOMBRE', 'NOMBRE_ORIGINAL', 'NOMBRE_NORMALIZADO']]
         
         if not month_columns:
             st.error(f"❌ No se encontraron columnas de meses en uso_por_mes.xlsx")
             return None, None, None
         
-        # Realizar merge de los archivos
-        df_merged = pd.merge(df_users, df_usage, on='NOMBRE', how='inner')
+        # Realizar merge usando nombres normalizados
+        df_merged = pd.merge(
+            df_users, 
+            df_usage, 
+            on='NOMBRE_NORMALIZADO', 
+            how='inner',
+            suffixes=('_users', '_usage')
+        )
         
         if len(df_merged) == 0:
             st.error("❌ No se encontraron coincidencias entre los archivos. Verifica que los nombres coincidan.")
+            # Mostrar algunos ejemplos de nombres para debugging
+            st.info("📋 Ejemplos de nombres en areas_personas.xlsx (normalizados):")
+            st.text(df_users['NOMBRE_NORMALIZADO'].head(10).tolist())
+            st.info("📋 Ejemplos de nombres en uso_por_mes.xlsx (normalizados):")
+            st.text(df_usage['NOMBRE_NORMALIZADO'].head(10).tolist())
             return None, None, None
+        
+        # Usar el nombre original del archivo de usuarios como nombre principal
+        df_merged['NOMBRE'] = df_merged['NOMBRE_ORIGINAL_users']
+        
+        # Eliminar columnas auxiliares que ya no necesitamos
+        columns_to_drop = ['NOMBRE_NORMALIZADO', 'NOMBRE_ORIGINAL_users', 'NOMBRE_ORIGINAL_usage']
+        df_merged = df_merged.drop(columns=columns_to_drop, errors='ignore')
         
         # Limpiar valores nulos en las columnas básicas
         df_merged['NOMBRE'] = df_merged['NOMBRE'].fillna('Sin Nombre')
@@ -101,6 +136,11 @@ def process_input_files():
         original_count = len(df_merged)
         df_merged = df_merged[df_merged['AREA'].str.lower() != 'operaciones']
         filtered_count = len(df_merged)
+        
+        # Informar sobre el resultado del merge y filtrado
+        st.success(f"✅ Se procesaron correctamente {len(df_merged)} registros")
+        if original_count > filtered_count:
+            st.info(f"ℹ️ Se filtraron {original_count - filtered_count} registros del área de Operaciones")
 
         # Ordenar meses cronológicamente
         month_columns_sorted = sort_months_chronologically(month_columns)
