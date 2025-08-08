@@ -134,9 +134,6 @@ def process_input_files():
 
         # FILTRAR: Excluir área de "Operaciones"
         df_merged = df_merged[df_merged['AREA'].str.lower() != 'operaciones']
-        
-        # Informar sobre el resultado del merge y filtrado
-        st.success(f"✅ Se procesaron correctamente {len(df_merged)} registros")
 
         # Ordenar meses cronológicamente
         month_columns_sorted = sort_months_chronologically(month_columns)
@@ -1893,8 +1890,6 @@ def main():
         df_original, df_melted, month_columns_sorted = process_input_files()
 
     if df_melted is not None:
-        # Mostrar información básica de los datos procesados
-        st.success("✅ **Archivos procesados exitosamente**")
         
         # Información compacta de los datos
         col1, col2, col3 = st.columns(3)
